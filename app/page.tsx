@@ -176,13 +176,21 @@ export default function Home() {
     });
   }
 
-  function todayDisplay() {
-    const now = new Date();
-    const day = String(now.getDate()).padStart(2, "0");
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const year = String(now.getFullYear());
-    return `${day}/${month}/${year}`;
-  }
+  function todayDisplayLK() {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Colombo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).formatToParts(now);
+
+  const dd = parts.find((p) => p.type === "day")?.value || "01";
+  const mm = parts.find((p) => p.type === "month")?.value || "01";
+  const yyyy = parts.find((p) => p.type === "year")?.value || "2000";
+
+  return `${dd}/${mm}/${yyyy}`;
+}
 
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
@@ -196,7 +204,7 @@ const [authPassword, setAuthPassword] = useState("");
 const [authLoading, setAuthLoading] = useState(true);
 const [authSubmitting, setAuthSubmitting] = useState(false);
 
-  const [saleDate, setSaleDate] = useState(todayDisplay());
+  const [saleDate, setSaleDate] = useState(todayDisplayLK());
   const [customerName, setCustomerName] = useState("");
   const [phone1, setPhone1] = useState("");
   const [phone2, setPhone2] = useState("");
@@ -265,7 +273,7 @@ const [stockStats, setStockStats] = useState({
   const [rmBalanceRows, setRmBalanceRows] = useState<RMBalanceRow[]>([]);
   const [rmRecentRows, setRmRecentRows] = useState<RMMovementRow[]>([]);
 
-  const [rmDate, setRmDate] = useState(todayDisplay());
+  const [rmDate, setRmDate] = useState(todayDisplayLK());
   const [rmType, setRmType] = useState<"PURCHASE" | "ISSUE">("PURCHASE");
   const [rmSearch, setRmSearch] = useState("");
   const [selectedRmMaterialId, setSelectedRmMaterialId] = useState("");
@@ -293,7 +301,7 @@ const [stockStats, setStockStats] = useState({
   const [rmBalanceSortBy, setRmBalanceSortBy] = useState("Status");
   const [rmBalanceDirection, setRmBalanceDirection] = useState("Asc");
 
-  const [inventoryDate, setInventoryDate] = useState(todayDisplay());
+  const [inventoryDate, setInventoryDate] = useState(todayDisplayLK());
   const [inventoryDirection, setInventoryDirection] = useState<"IN" | "OUT">("IN");
   const [inventorySearch, setInventorySearch] = useState("");
   const [selectedInventoryProductId, setSelectedInventoryProductId] = useState("");
@@ -922,7 +930,7 @@ async function loadRecentInventoryMovements() {
   }
 
   async function clearSale() {
-    setSaleDate(todayDisplay());
+    setSaleDate(todayDisplayLK());
     setCustomerName("");
     setPhone1("");
     setPhone2("");
@@ -952,22 +960,27 @@ async function loadRecentInventoryMovements() {
   function toOrderDateISO(input: string) {
   const value = String(input || "").trim();
 
-  // Supports yyyy-mm-dd
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return `${value}T00:00:00+05:30`;
   }
 
-  // Supports dd/mm/yyyy
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
     const [dd, mm, yyyy] = value.split("/");
     return `${yyyy}-${mm}-${dd}T00:00:00+05:30`;
   }
 
-  // fallback = today in Sri Lanka offset style
   const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Colombo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).formatToParts(now);
+
+  const dd = parts.find((p) => p.type === "day")?.value || "01";
+  const mm = parts.find((p) => p.type === "month")?.value || "01";
+  const yyyy = parts.find((p) => p.type === "year")?.value || "2000";
+
   return `${yyyy}-${mm}-${dd}T00:00:00+05:30`;
 }
 
@@ -1191,7 +1204,7 @@ async function loadDashboard() {
     console.log("DASHBOARD SALESPERSON:", parsed?.salesperson);
 
     setDashboardData(parsed || {});
-    showSuccess("Dashboard loaded ✅");
+    
   } catch (err: any) {
     showError("Dashboard load failed: " + (err?.message || "Unknown error"));
   } finally {
@@ -1214,7 +1227,7 @@ async function loadRMTabData() {
 }
 
 function resetRMForm() {
-  setRmDate(todayDisplay());
+  setRmDate(todayDisplayLK());
   setRmType("PURCHASE");
   setRmSearch("");
   setSelectedRmMaterialId("");
@@ -1390,7 +1403,7 @@ async function handleRegisterRMVendor() {
 }
 
 function resetInventoryForm() {
-  setInventoryDate(todayDisplay());
+  setInventoryDate(todayDisplayLK());
   setInventoryDirection("IN");
   setInventorySearch("");
   setSelectedInventoryProductId("");
@@ -1835,7 +1848,7 @@ async function fetchDispatchedOrdersLast7Days(phoneQuery = "") {
 
     showSuccess(`Order saved successfully ✅ ${savedOrderNo}`);
 
-    setSaleDate(todayDisplay());
+    setSaleDate(todayDisplayLK());
     setCustomerName("");
     setPhone1("");
     setPhone2("");
