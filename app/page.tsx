@@ -110,6 +110,9 @@ const ROLE_TABS: Record<string, TabKey[]> = {
     "stock",
     "dashboard",
   ],
+  MARKETING: [
+    "dashboard",
+  ],
 };
 
 function normalizeRole(role?: string | null) {
