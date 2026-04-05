@@ -2637,39 +2637,46 @@ async function handleSignOut() {
         className="soft-input"
         value={inventorySearch}
         onChange={(e) => {
-          setInventorySearch(e.target.value);
-          setSelectedInventoryProductId("");
-        }}
+  const value = e.target.value;
+  setInventorySearch(value);
+  setSelectedInventoryProductId("");
+
+  if (!value.trim()) {
+    setInventorySellPrice("0");
+  }
+}}
         placeholder="type sku or words..."
       />
     </div>
 
     <div className="mt-2">
       <select
-        className="listbox-soft"
-        size={inventorySearch.trim() ? Math.min(filteredInventoryProducts.length || 1, 8) : 8}
-        value={selectedInventoryProductId}
-        onChange={(e) => {
-          const id = e.target.value;
-          setSelectedInventoryProductId(id);
+  className="listbox-soft"
+  size={inventorySearch.trim() ? Math.min(filteredInventoryProducts.length || 1, 8) : 8}
+  value={selectedInventoryProductId}
+  onChange={(e) => {
+    const id = e.target.value;
+    setSelectedInventoryProductId(id);
 
-          const picked = filteredInventoryProducts.find((p) => p.id === id);
-          if (picked) {
-            setInventorySearch(
-              `${picked.sku} • ${picked.product_type} • ${picked.material} • ${picked.color} • ${picked.size}`
-            );
-            if (inventoryDirection === "IN") {
-              setInventorySellPrice(String(Number(picked.selling_price || 0)));
-            }
-          }
-        }}
-      >
-        {filteredInventoryProducts.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.sku} • {p.product_type} • {p.material} • {p.color} • {p.size}
-          </option>
-        ))}
-      </select>
+    const picked = filteredInventoryProducts.find((p) => p.id === id);
+    if (picked) {
+      setInventorySearch(
+        `${picked.sku} • ${picked.product_type} • ${picked.material} • ${picked.color} • ${picked.size}`
+      );
+      if (inventoryDirection === "IN") {
+        setInventorySellPrice(String(Number(picked.selling_price || 0)));
+      }
+    }
+  }}
+>
+  <option value="">Select product</option>
+
+  {filteredInventoryProducts.map((p) => (
+    <option key={p.id} value={p.id}>
+      {p.sku} • {p.product_type} • {p.material} • {p.color} • {p.size}
+    </option>
+  ))}
+</select>
     </div>
 
     <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -3317,7 +3324,15 @@ async function handleSignOut() {
                 className="soft-input"
                 placeholder="Search product"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+  const value = e.target.value;
+  setSearch(value);
+
+  if (!value.trim()) {
+    setSelectedProductId("");
+    setPrice("");
+  }
+}}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
@@ -3327,19 +3342,21 @@ async function handleSignOut() {
               />
 
               <select
-                className="listbox-soft mt-2"
-                size={10}
-                value={selectedProductId}
-                onChange={(e) => {
-                  pickProductById(e.target.value);
-                }}
-              >
-                {filteredProducts.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.sku} • {p.product_type} • {p.material} • {p.color} • {p.size}
-                  </option>
-                ))}
-              </select>
+  className="listbox-soft mt-2"
+  size={10}
+  value={selectedProductId}
+  onChange={(e) => {
+    pickProductById(e.target.value);
+  }}
+>
+  <option value="">Select product</option>
+
+  {filteredProducts.map((p) => (
+    <option key={p.id} value={p.id}>
+      {p.sku} • {p.product_type} • {p.material} • {p.color} • {p.size}
+    </option>
+  ))}
+</select>
             </div>
 
             <div>
