@@ -1117,7 +1117,6 @@ async function fetchRMVendors() {
   const { data, error } = await supabase
     .from("rm_vendors")
     .select("id, vendor_code, vendor_name, phone, notes, status")
-    .eq("status", "ACTIVE")
     .order("vendor_code", { ascending: true });
 
   if (error) {
@@ -3556,12 +3555,12 @@ async function handleSignOut() {
 
             <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row md:items-end">
   <div className="min-w-[280px]">
-    <label className="soft-label">Search Phone</label>
+    <label className="soft-label">Search</label>
     <input
       className="soft-input"
       value={pendingSearchPhone}
       onChange={(e) => setPendingSearchPhone(e.target.value)}
-      placeholder="Type phone number"
+      placeholder="Type phone or order no"
     />
   </div>
 
@@ -3696,12 +3695,12 @@ async function handleSignOut() {
 
       <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row md:items-end">
         <div className="min-w-[280px]">
-          <label className="soft-label">Search Phone</label>
+          <label className="soft-label">Search</label>
           <input
             className="soft-input"
             value={dispatchedTodaySearchPhone}
             onChange={(e) => setDispatchedTodaySearchPhone(e.target.value)}
-            placeholder="Type phone number"
+            placeholder="Type phone or order no"
           />
         </div>
 
@@ -3777,12 +3776,12 @@ async function handleSignOut() {
 
       <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row md:items-end">
         <div className="min-w-[280px]">
-          <label className="soft-label">Search Phone</label>
+          <label className="soft-label">Search</label>
           <input
             className="soft-input"
             value={dispatched7SearchPhone}
             onChange={(e) => setDispatched7SearchPhone(e.target.value)}
-            placeholder="Type phone number"
+            placeholder="Type phone or order no"
           />
         </div>
 
