@@ -181,18 +181,19 @@ export default function Home() {
 
   function todayDisplayLK() {
   const now = new Date();
-  const parts = new Intl.DateTimeFormat("en-GB", {
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Colombo",
-    day: "2-digit",
-    month: "2-digit",
     year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
   }).formatToParts(now);
 
-  const dd = parts.find((p) => p.type === "day")?.value || "01";
-  const mm = parts.find((p) => p.type === "month")?.value || "01";
   const yyyy = parts.find((p) => p.type === "year")?.value || "2000";
+  const mm = parts.find((p) => p.type === "month")?.value || "01";
+  const dd = parts.find((p) => p.type === "day")?.value || "01";
 
-  return `${dd}/${mm}/${yyyy}`;
+  return `${yyyy}-${mm}-${dd}`;
 }
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -528,6 +529,16 @@ useEffect(() => {
 
   return () => clearTimeout(t);
 }, [activeTab, dispatched7SearchPhone]);
+
+useEffect(() => {
+  if (activeTab !== "inventory") return;
+
+  void loadProductsForInventoryRefresh();
+
+  if (!newProductSku.trim()) {
+    void generateNextNewProductSku();
+  }
+}, [activeTab]);
 
 
 useEffect(() => {
@@ -1423,6 +1434,10 @@ function resetNewProductForm() {
   setNewProductSize("");
   setNewProductCostPrice("0");
   setNewProductSellingPrice("0");
+
+  setTimeout(() => {
+    void generateNextNewProductSku();
+  }, 0);
 }
 
 async function handleSubmitInventory() {
@@ -1494,11 +1509,6 @@ async function handleSubmitInventory() {
 }
 
 async function handleRegisterProduct() {
-  if (!newProductSku.trim()) {
-    setMessage("SKU is required");
-    return;
-  }
-
   if (!newProductType.trim()) {
     setMessage("Product type is required");
     return;
@@ -1551,8 +1561,22 @@ async function handleRegisterProduct() {
     }
 
     setMessage(`Product registered ✅ ${payload.sku}`);
-    resetNewProductForm();
-    await loadProductsForInventoryRefresh();
+    const insertedProduct = data as Product;
+
+setProducts((prev) => {
+  const exists = prev.some((p) => p.id === insertedProduct.id);
+  if (exists) return prev;
+  return [...prev, insertedProduct].sort((a, b) => a.sku.localeCompare(b.sku));
+});
+
+setFilteredProducts((prev) => {
+  const exists = prev.some((p) => p.id === insertedProduct.id);
+  if (exists) return prev;
+  return [insertedProduct, ...prev].slice(0, 50);
+});
+
+resetNewProductForm();
+await loadProductsForInventoryRefresh();
 
     if (data?.id) {
       setSelectedInventoryProductId(data.id);
@@ -1579,6 +1603,26 @@ async function loadProductsForInventoryRefresh() {
     setProducts((data || []) as Product[]);
     setFilteredProducts((data || []).slice(0, 50) as Product[]);
   }
+}
+
+async function generateNextNewProductSku() {
+  const { data, error } = await supabase
+    .from("products")
+    .select("sku")
+    .ilike("sku", "SKU-N-%");
+
+  if (error) {
+    setMessage("SKU generate failed: " + error.message);
+    return;
+  }
+
+  const maxNo = (data || []).reduce((max, row: any) => {
+    const match = String(row.sku || "").match(/^SKU-N-(\d+)$/i);
+    if (!match) return max;
+    return Math.max(max, Number(match[1]));
+  }, 0);
+
+  setNewProductSku(`SKU-N-${String(maxNo + 1).padStart(2, "0")}`);
 }
 
 async function handlePendingOrderAction(
@@ -2134,10 +2178,11 @@ async function handleSignOut() {
           <div>
             <label className="soft-label">Date</label>
             <input
-              className="soft-input"
-              value={rmDate}
-              onChange={(e) => setRmDate(e.target.value)}
-            />
+  type="date"
+  className="soft-input"
+  value={rmDate}
+  onChange={(e) => setRmDate(e.target.value)}
+/>
           </div>
 
           <div>
@@ -2606,10 +2651,11 @@ async function handleSignOut() {
       <div>
         <label className="soft-label">Date</label>
         <input
-          className="soft-input"
-          value={inventoryDate}
-          onChange={(e) => setInventoryDate(e.target.value)}
-        />
+  type="date"
+  className="soft-input"
+  value={inventoryDate}
+  onChange={(e) => setInventoryDate(e.target.value)}
+/>
       </div>
 
       <div>
@@ -2728,9 +2774,10 @@ async function handleSignOut() {
             </>
           ) : (
             <>
-              <option>Stock Balance</option>
-              <option>Item Defect</option>
-              <option>Other</option>
+              <option value="Stock Balance">Stock Balance</option>
+              <option value="Whole Sale">Whole Sale</option>
+              <option value="Item Defect">Item Defect</option>
+              <option value="Other">Other</option>
             </>
           )}
         </select>
@@ -2772,10 +2819,11 @@ async function handleSignOut() {
         <div>
           <label className="soft-label">SKU</label>
           <input
-            className="soft-input"
-            value={newProductSku}
-            onChange={(e) => setNewProductSku(e.target.value)}
-          />
+  className="soft-input bg-gray-50 font-semibold"
+  value={newProductSku}
+  readOnly
+  placeholder="Auto generated"
+/>
         </div>
 
         <div>
