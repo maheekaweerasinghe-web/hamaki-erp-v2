@@ -29,6 +29,19 @@ type FinancialSummaryRow = {
   is_complete: boolean | null;
 };
 
+type DailySalesRow = {
+  day_no: number;
+  current_month_daily_sales: number | string | null;
+  current_month_daily_returns: number | string | null;
+  current_month_daily_net_sales: number | string | null;
+  current_month_cumulative_sales: number | string | null;
+  previous_month_daily_sales: number | string | null;
+  previous_month_daily_returns: number | string | null;
+  previous_month_daily_net_sales: number | string | null;
+  previous_month_cumulative_sales: number | string | null;
+  target_cumulative: number | string | null;
+};
+
 type MonthlyFinancialRow = {
   id: number | string;
   month_start: string;
@@ -119,6 +132,23 @@ function lastTwelveMonths() {
   });
 }
 
+function colomboDayInfo() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Colombo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const year = Number(parts.find((p) => p.type === "year")?.value || 2000);
+  const month = Number(parts.find((p) => p.type === "month")?.value || 1);
+  const day = Number(parts.find((p) => p.type === "day")?.value || 1);
+  return { year, month, day, daysInMonth: new Date(Date.UTC(year, month, 0)).getUTCDate() };
+}
+
+function average(values: number[]) {
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+}
+
 function calculate(row?: Partial<FinancialSummaryRow> | null) {
   const productSales = num(row?.product_sales);
   const codReturnValue = num(row?.cod_return_value);
@@ -180,6 +210,10 @@ export default function Financials({ formatRs, showSuccess, showError }: Props) 
   const [editingExceptionalId, setEditingExceptionalId] = useState<number | string | null>(null);
   const [editingExceptionalDescription, setEditingExceptionalDescription] = useState("");
   const [editingExceptionalAmount, setEditingExceptionalAmount] = useState("");
+  const [dailySalesRows, setDailySalesRows] = useState<DailySalesRow[]>([]);
+  const [dailySalesLoading, setDailySalesLoading] = useState(true);
+  const [salesTarget, setSalesTarget] = useState(8000000);
+  const [marginTarget, setMarginTarget] = useState(25);
 
   const currentMonth = monthKeyInColombo();
   const monthKeys = useMemo(() => lastTwelveMonths(), []);
@@ -203,9 +237,44 @@ export default function Financials({ formatRs, showSuccess, showError }: Props) 
     setLoading(false);
   }, [monthKeys, showError]);
 
+  const loadDailySales = useCallback(async () => {
+    setDailySalesLoading(true);
+    const { data, error } = await supabase.rpc("get_financial_daily_sales_comparison", {
+      p_target: Math.round(salesTarget),
+    });
+
+    if (error) {
+      showError("Daily sales chart failed: " + error.message);
+      setDailySalesLoading(false);
+      return;
+    }
+
+    setDailySalesRows((data || []) as DailySalesRow[]);
+    setDailySalesLoading(false);
+  }, [salesTarget, showError]);
+
+  useEffect(() => {
+    const savedSalesTarget = Number(window.localStorage.getItem("hamaki_financial_sales_target") || 8000000);
+    const savedMarginTarget = Number(window.localStorage.getItem("hamaki_financial_margin_target") || 25);
+    if (Number.isFinite(savedSalesTarget) && savedSalesTarget > 0) setSalesTarget(savedSalesTarget);
+    if (Number.isFinite(savedMarginTarget) && savedMarginTarget > 0) setMarginTarget(savedMarginTarget);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("hamaki_financial_sales_target", String(Math.round(salesTarget)));
+  }, [salesTarget]);
+
+  useEffect(() => {
+    window.localStorage.setItem("hamaki_financial_margin_target", String(marginTarget));
+  }, [marginTarget]);
+
   useEffect(() => {
     void loadSummary();
   }, [loadSummary]);
+
+  useEffect(() => {
+    void loadDailySales();
+  }, [loadDailySales]);
 
   const summaryByMonth = useMemo(() => {
     const map = new Map<string, FinancialSummaryRow>();
@@ -407,6 +476,107 @@ export default function Financials({ formatRs, showSuccess, showError }: Props) 
     if (value === "") return "";
     return String(Math.round(num(value)));
   }
+
+  const currentSummary = summaryByMonth.get(currentMonth);
+  const completedPriorRows = useMemo(() => {
+    return summaryRows
+      .filter((row) => row.month_start < currentMonth && (Boolean(row.is_complete) || num(row.product_sales) > 0))
+      .sort((a, b) => b.month_start.localeCompare(a.month_start))
+      .slice(0, 2);
+  }, [summaryRows, currentMonth]);
+
+  const control = useMemo(() => {
+    const { day: elapsedDays, daysInMonth } = colomboDayInfo();
+    const remainingDays = Math.max(0, daysInMonth - elapsedDays);
+    const currentCalc = calculate(currentSummary);
+    const currentNetSales = currentCalc.netProductSales;
+    const projectedSales = elapsedDays > 0 ? (currentNetSales / elapsedDays) * daysInMonth : currentNetSales;
+
+    const priorMaterialRatios = completedPriorRows
+      .map((row) => {
+        const calc = calculate(row);
+        return calc.netProductSales > 0 ? num(row.materials_issued) / calc.netProductSales : 0;
+      })
+      .filter((value) => value > 0);
+    const benchmarkMaterialRatio = average(priorMaterialRatios);
+    const paceProjectedMaterial = elapsedDays > 0 ? (num(currentSummary?.materials_issued) / elapsedDays) * daysInMonth : 0;
+    const benchmarkProjectedMaterial = projectedSales * benchmarkMaterialRatio;
+    const projectedMaterial = benchmarkMaterialRatio > 0
+      ? (paceProjectedMaterial + benchmarkProjectedMaterial) / 2
+      : paceProjectedMaterial;
+
+    const regularKeys: ExpenseKey[] = [
+      "payroll",
+      "epf_etf",
+      "advertising",
+      "electricity",
+      "bank_payment_fees",
+      "vehicle_transport",
+      "maintenance",
+      "other_regular_expenses",
+    ];
+
+    const forecastRegularExpenses = regularKeys.reduce((sum, key) => {
+      const actual = num(currentSummary?.[key]);
+      if (actual > 0) return sum + actual;
+      const history = completedPriorRows.map((row) => num(row[key])).filter((value) => value > 0);
+      return sum + average(history);
+    }, 0);
+
+    const currentExceptional = num(currentSummary?.exceptional_expenses);
+    const currentTaxes = num(currentSummary?.income_tax) + num(currentSummary?.other_taxes_levies);
+    const projectedGrossProfit = projectedSales - projectedMaterial;
+    const projectedNetProfit = projectedGrossProfit - forecastRegularExpenses - currentExceptional - currentTaxes;
+    const projectedMargin = projectedSales > 0 ? (projectedNetProfit / projectedSales) * 100 : 0;
+
+    const actualPurchases = num(currentSummary?.materials_purchased);
+    const projectedPurchases = elapsedDays > 0 ? (actualPurchases / elapsedDays) * daysInMonth : actualPurchases;
+    const operatingCashProxy = projectedSales - projectedPurchases - forecastRegularExpenses - currentExceptional - currentTaxes;
+
+    const requiredDailySales = remainingDays > 0 ? Math.max(0, salesTarget - currentNetSales) / remainingDays : 0;
+    const salesProgress = salesTarget > 0 ? (currentNetSales / salesTarget) * 100 : 0;
+    const projectedMaterialRatio = projectedSales > 0 ? projectedMaterial / projectedSales : 0;
+    const currentReturnRate = num(currentSummary?.units_sold) > 0
+      ? (num(currentSummary?.cod_return_units) / num(currentSummary?.units_sold)) * 100
+      : 0;
+    const adSpendForecast = (() => {
+      const actual = num(currentSummary?.advertising);
+      if (actual > 0) return actual;
+      return average(completedPriorRows.map((row) => num(row.advertising)).filter((value) => value > 0));
+    })();
+    const adEfficiency = adSpendForecast > 0 ? projectedSales / adSpendForecast : 0;
+
+    const salesStatus = projectedSales >= salesTarget ? 0 : projectedSales >= salesTarget * 0.9375 ? 1 : projectedSales >= salesTarget * 0.8125 ? 2 : 3;
+    const marginStatus = projectedMargin >= marginTarget ? 0 : projectedMargin >= 20 ? 1 : projectedMargin >= 10 ? 2 : 3;
+    const overallLevel = Math.max(salesStatus, marginStatus);
+    const levels = [
+      { label: "HEALTHY", bg: "bg-green-50", text: "text-green-700", border: "border-green-200" },
+      { label: "WATCH", bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
+      { label: "ACTION", bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-200" },
+      { label: "CRITICAL", bg: "bg-red-50", text: "text-red-700", border: "border-red-200" },
+    ];
+
+    const actions: string[] = [];
+    if (projectedSales < salesTarget) {
+      actions.push(`Projected sales are ${wholeRs(salesTarget - projectedSales)} below target. ${remainingDays > 0 ? `Required average for the remaining ${remainingDays} day${remainingDays === 1 ? "" : "s"}: ${wholeRs(requiredDailySales)}/day.` : ""}`);
+    }
+    if (benchmarkMaterialRatio > 0 && projectedMaterialRatio > benchmarkMaterialRatio + 0.03) {
+      actions.push(`Material consumption is running high at about ${Math.round(projectedMaterialRatio * 100)}% of sales versus a recent benchmark of ${Math.round(benchmarkMaterialRatio * 100)}%.`);
+    }
+    if (projectedMargin < marginTarget) {
+      actions.push(`Projected margin is ${Math.round(projectedMargin)}%, below the ${marginTarget}% target. Review controllable spending and sales mix.`);
+    }
+    if (currentReturnRate > 6) actions.push(`COD return rate is ${currentReturnRate.toFixed(1)}%. Review return causes and courier/customer confirmation quality.`);
+    if (adEfficiency > 0 && adEfficiency < 4) actions.push(`Projected net-sales-to-ad-spend efficiency is only ${adEfficiency.toFixed(1)}x. Avoid increasing ad spend blindly.`);
+    if (!actions.length) actions.push("Sales and projected margin are currently on track. Keep monitoring daily sales, material usage and returns.");
+
+    return {
+      elapsedDays, daysInMonth, remainingDays, currentNetSales, projectedSales, benchmarkMaterialRatio,
+      projectedMaterial, projectedMaterialRatio, forecastRegularExpenses, projectedNetProfit, projectedMargin,
+      projectedPurchases, operatingCashProxy, requiredDailySales, salesProgress, currentReturnRate, adEfficiency,
+      status: levels[overallLevel], actions,
+    };
+  }, [currentSummary, completedPriorRows, salesTarget, marginTarget]);
 
   const selectedSummary = selectedMonth ? summaryByMonth.get(selectedMonth) : undefined;
   const exceptionalTotal = exceptional.reduce((sum, item) => sum + num(item.amount), 0);
@@ -668,16 +838,185 @@ export default function Financials({ formatRs, showSuccess, showError }: Props) 
           <h2 className="text-[26px] font-extrabold tracking-[-0.02em] text-[var(--text)]">Financials</h2>
           <p className="mt-1 text-[13px] text-[var(--muted)]">Last 12 months of Hamaki sales, production cost, expenses and profit.</p>
         </div>
-        <button className="secondary-btn" disabled={loading} onClick={() => void loadSummary()}>
-          {loading ? "Refreshing..." : "Refresh"}
+        <button
+          className="secondary-btn"
+          disabled={loading || dailySalesLoading}
+          onClick={() => { void loadSummary(); void loadDailySales(); }}
+        >
+          {loading || dailySalesLoading ? "Refreshing..." : "Refresh"}
         </button>
       </div>
 
+      <section className="mt-6 rounded-[18px] border border-[#d7dee8] bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex flex-wrap items-center gap-3">
+              <h3 className="text-[20px] font-extrabold text-[var(--text)]">Current Month Control</h3>
+              <span className={`rounded-full border px-3 py-1 text-[11px] font-extrabold ${control.status.bg} ${control.status.text} ${control.status.border}`}>
+                {control.status.label}
+              </span>
+            </div>
+            <p className="mt-1 text-[12px] text-[var(--muted)]">Live net-sales progress and month-end forecast. COD returns are deducted on the day they are received.</p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <label className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--muted)]">
+              Sales target
+              <input
+                type="number"
+                min="1"
+                step="100000"
+                className="soft-input mt-1 w-[155px]"
+                value={salesTarget}
+                onChange={(e) => setSalesTarget(Math.max(1, Math.round(num(e.target.value))))}
+              />
+            </label>
+            <label className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--muted)]">
+              Margin target %
+              <input
+                type="number"
+                min="1"
+                max="100"
+                step="1"
+                className="soft-input mt-1 w-[120px]"
+                value={marginTarget}
+                onChange={(e) => setMarginTarget(Math.max(1, Math.min(100, num(e.target.value))))}
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[1.45fr_0.8fr]">
+          <div className="rounded-[16px] border border-[#d7dee8] bg-[#f8fafc] p-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-[var(--muted)]">
+                  {monthLabel(currentMonth)} · Day {control.elapsedDays} of {control.daysInMonth}
+                </div>
+                <div className="mt-1 text-[24px] font-extrabold tracking-[-0.02em] text-[var(--text)]">
+                  Target chase
+                </div>
+                <div className="mt-1 text-[13px] text-[var(--muted)]">
+                  {control.elapsedDays} days completed · {control.remainingDays} days remaining
+                </div>
+              </div>
+
+              <span className={`rounded-full border px-3 py-1 text-[11px] font-extrabold ${control.status.bg} ${control.status.text} ${control.status.border}`}>
+                {control.status.label}
+              </span>
+            </div>
+
+            <div className="mt-5 h-3 overflow-hidden rounded-full bg-[#e5ebf2]">
+              <div
+                className="h-full rounded-full bg-green-600 transition-all"
+                style={{ width: `${Math.min(100, Math.max(0, control.salesProgress))}%` }}
+              />
+            </div>
+
+            <div className="mt-2 flex flex-wrap justify-between gap-2 text-[13px]">
+              <span className="font-bold text-green-700">{wholeRs(control.currentNetSales)} sales</span>
+              <span className="font-semibold text-[var(--muted)]">{wholeRs(salesTarget)} target</span>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--muted)]">Days completed</div>
+                <div className="mt-1 text-[21px] font-extrabold text-[var(--text)]">{control.elapsedDays}</div>
+              </div>
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--muted)]">Days remaining</div>
+                <div className="mt-1 text-[21px] font-extrabold text-[var(--text)]">{control.remainingDays}</div>
+              </div>
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--muted)]">Target gap</div>
+                <div className="mt-1 text-[21px] font-extrabold text-orange-700">
+                  {wholeRs(Math.max(0, salesTarget - control.currentNetSales))}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--muted)]">Progress</div>
+                <div className="mt-1 text-[21px] font-extrabold text-[var(--text)]">{Math.round(control.salesProgress)}%</div>
+              </div>
+            </div>
+          </div>
+
+          <div className={`rounded-[16px] border p-5 ${
+            control.requiredDailySales > (control.currentNetSales / Math.max(1, control.elapsedDays)) * 2
+              ? "border-orange-200 bg-orange-50"
+              : "border-[#d7dee8] bg-white"
+          }`}>
+            <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-[var(--muted)]">
+              Required sales to hit target
+            </div>
+
+            {control.remainingDays > 0 ? (
+              <>
+                <div className="mt-2 text-[32px] font-extrabold tracking-[-0.03em] text-[var(--text)]">
+                  {wholeRs(control.requiredDailySales)}
+                  <span className="ml-1 text-[16px] font-bold text-[var(--muted)]">/day</span>
+                </div>
+                <div className="mt-2 text-[13px] leading-5 text-[var(--muted)]">
+                  Need {wholeRs(Math.max(0, salesTarget - control.currentNetSales))} more across the remaining {control.remainingDays} day{control.remainingDays === 1 ? "" : "s"}.
+                </div>
+                <div className="mt-4 border-t border-[#e5ebf2] pt-4">
+                  <div className="flex items-center justify-between gap-3 text-[13px]">
+                    <span className="text-[var(--muted)]">Current average/day</span>
+                    <span className="font-bold text-[var(--text)]">
+                      {wholeRs(control.currentNetSales / Math.max(1, control.elapsedDays))}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-3 text-[13px]">
+                    <span className="text-[var(--muted)]">Target average/day</span>
+                    <span className="font-bold text-[var(--text)]">
+                      {wholeRs(salesTarget / Math.max(1, control.daysInMonth))}
+                    </span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="mt-2 text-[24px] font-extrabold text-[var(--text)]">
+                Month complete
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <SalesProgressChart rows={dailySalesRows} target={salesTarget} loading={dailySalesLoading} formatRs={wholeRs} />
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <ControlCard label="Net Sales MTD" value={wholeRs(control.currentNetSales)} sub={`${Math.round(control.salesProgress)}% of target`} />
+          <ControlCard label="Projected Sales" value={wholeRs(control.projectedSales)} sub={`Target ${wholeRs(salesTarget)}`} />
+          <ControlCard label="Projected Material" value={wholeRs(control.projectedMaterial)} sub={`~${Math.round(control.projectedMaterialRatio * 100)}% of sales`} />
+          <ControlCard label="Forecast Expenses" value={wholeRs(control.forecastRegularExpenses)} sub="Actual entered + recent 2-month average" />
+          <ControlCard label="Projected Net Profit" value={wholeRs(control.projectedNetProfit)} sub={`${Math.round(control.projectedMargin)}% projected margin`} emphasis={control.projectedMargin >= marginTarget} />
+          <ControlCard label="Operating Cash Proxy" value={wholeRs(control.operatingCashProxy)} sub="Sales − projected purchases − expenses" />
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-[14px] border border-[#e5ebf2] bg-[#f8fafc] p-4">
+            <div className="text-[12px] font-extrabold uppercase tracking-[0.07em] text-[var(--muted)]">Target actions</div>
+            <ul className="mt-3 space-y-2 text-[13px] leading-5 text-[var(--text)]">
+              {control.actions.map((action, index) => <li key={index}>• {action}</li>)}
+            </ul>
+          </div>
+          <div className="rounded-[14px] border border-[#e5ebf2] bg-white p-4">
+            <div className="text-[12px] font-extrabold uppercase tracking-[0.07em] text-[var(--muted)]">Forecast basis</div>
+            <div className="mt-3 space-y-2 text-[12px] leading-5 text-[var(--muted)]">
+              <div><b className="text-[var(--text)]">Material benchmark:</b> {control.benchmarkMaterialRatio > 0 ? `${Math.round(control.benchmarkMaterialRatio * 100)}% of net sales` : "Not enough history"} from the previous two operating months.</div>
+              <div><b className="text-[var(--text)]">Expense forecast:</b> uses current entered values; missing recurring categories use the previous two months' average.</div>
+              <div><b className="text-[var(--text)]">Cash proxy:</b> management estimate only. Net sales are not the same as bank/courier cash receipts, and purchase dates are not necessarily payment dates.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div className="mt-6 overflow-x-auto rounded-[16px] border border-[#d7dee8] bg-white">
-        <table className="erp-table min-w-[980px]">
+        <table className="erp-table min-w-[1080px]">
           <thead>
             <tr>
               <th>Month</th>
+              <th className="num">Units Sold</th>
               <th className="num">Net Sales</th>
               <th className="num">Material Cost</th>
               <th className="num">Regular Expenses</th>
@@ -700,6 +1039,7 @@ export default function Financials({ formatRs, showSuccess, showError }: Props) 
                     {isCurrent && <div className="mt-0.5 text-[11px] text-blue-600">Month to date</div>}
                     {!hasOperationalData && <div className="mt-0.5 text-[11px] text-[var(--muted)]">No operational data</div>}
                   </td>
+                  <td className="num font-semibold">{hasOperationalData ? wholeNumber(row?.units_sold) : "—"}</td>
                   <td className="num font-semibold">{hasOperationalData ? wholeRs(calc.netProductSales) : "—"}</td>
                   <td className="num">{hasOperationalData ? wholeRs(num(row?.materials_issued)) : "—"}</td>
                   <td className="num">{row ? wholeRs(calc.regularExpenses) : "—"}</td>
@@ -718,6 +1058,96 @@ export default function Financials({ formatRs, showSuccess, showError }: Props) 
 
       <div className="mt-4 rounded-[14px] bg-[#f8fafc] p-4 text-[12px] leading-5 text-[var(--muted)]">
         Sales are based on dispatched orders after extras and discounts. COD returns are deducted when returned stock is received. Shipping is excluded from profit. Material cost uses raw materials issued to production, while purchases are tracked separately until issued.
+      </div>
+    </div>
+  );
+}
+
+function ControlCard({ label, value, sub, emphasis = false }: { label: string; value: string; sub: string; emphasis?: boolean }) {
+  return (
+    <div className={`rounded-[15px] border p-4 ${emphasis ? "border-green-200 bg-green-50" : "border-[#d7dee8] bg-white"}`}>
+      <div className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[var(--muted)]">{label}</div>
+      <div className={`mt-2 text-[18px] font-extrabold ${emphasis ? "text-green-700" : "text-[var(--text)]"}`}>{value}</div>
+      <div className="mt-1 text-[11px] leading-4 text-[var(--muted)]">{sub}</div>
+    </div>
+  );
+}
+
+function SalesProgressChart({ rows, target, loading, formatRs }: { rows: DailySalesRow[]; target: number; loading: boolean; formatRs: (value: number) => string }) {
+  const width = 1000;
+  const height = 330;
+  const left = 72;
+  const right = 24;
+  const top = 24;
+  const bottom = 46;
+  const plotWidth = width - left - right;
+  const plotHeight = height - top - bottom;
+
+  if (loading) return <div className="flex h-[300px] items-center justify-center rounded-[14px] bg-[#f8fafc] text-[13px] text-[var(--muted)]">Loading daily sales…</div>;
+  if (!rows.length) return <div className="flex h-[300px] items-center justify-center rounded-[14px] bg-[#f8fafc] text-[13px] text-[var(--muted)]">No daily sales data available.</div>;
+
+  const maxDay = Math.max(...rows.map((row) => Number(row.day_no || 0)), 1);
+  const values = rows.flatMap((row) => [num(row.current_month_cumulative_sales), num(row.previous_month_cumulative_sales), num(row.target_cumulative)]);
+  const maxValue = Math.max(target, ...values, 1) * 1.08;
+  const x = (day: number) => left + ((day - 1) / Math.max(1, maxDay - 1)) * plotWidth;
+  const y = (value: number) => top + plotHeight - (value / maxValue) * plotHeight;
+
+  const pathFor = (key: keyof DailySalesRow) => {
+    const valid = rows.filter((row) => row[key] !== null && row[key] !== undefined);
+    return valid.map((row, index) => `${index === 0 ? "M" : "L"}${x(Number(row.day_no)).toFixed(1)},${y(num(row[key])).toFixed(1)}`).join(" ");
+  };
+
+  const yTicks = Array.from({ length: 5 }, (_, index) => (maxValue * index) / 4);
+  const xTicks = Array.from(new Set([1, 5, 10, 15, 20, 25, maxDay].filter((day) => day <= maxDay)));
+  const currentLast = [...rows].reverse().find((row) => row.current_month_cumulative_sales !== null && row.current_month_cumulative_sales !== undefined);
+  const previousLast = rows[rows.length - 1];
+
+  return (
+    <div className="rounded-[16px] border border-[#e5ebf2] bg-[#fbfdff] p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-[15px] font-extrabold text-[var(--text)]">Cumulative Net Sales Progress</div>
+          <div className="mt-0.5 text-[11px] text-[var(--muted)]">Current month vs previous month at the same day, after COD returns.</div>
+        </div>
+        <div className="flex flex-wrap gap-4 text-[11px] font-bold">
+          <span className="flex items-center gap-1.5"><span className="h-2.5 w-5 rounded-full bg-[#16a34a]" />Current month</span>
+          <span className="flex items-center gap-1.5"><span className="h-2.5 w-5 rounded-full bg-[#2563eb]" />Previous month</span>
+          <span className="flex items-center gap-1.5"><span className="h-2.5 w-5 rounded-full bg-[#f97316]" />Target pace</span>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[760px] w-full" role="img" aria-label="Cumulative daily net sales chart">
+          {yTicks.map((tick) => (
+            <g key={tick}>
+              <line x1={left} x2={width - right} y1={y(tick)} y2={y(tick)} stroke="#e5ebf2" strokeWidth="1" />
+              <text x={left - 10} y={y(tick) + 4} textAnchor="end" fontSize="11" fill="#64748b">{tick >= 1000000 ? `${(tick / 1000000).toFixed(1)}M` : `${Math.round(tick / 1000)}k`}</text>
+            </g>
+          ))}
+          {xTicks.map((day) => (
+            <text key={day} x={x(day)} y={height - 16} textAnchor="middle" fontSize="11" fill="#64748b">{day}</text>
+          ))}
+          <text x={width / 2} y={height - 2} textAnchor="middle" fontSize="11" fill="#64748b">Day of month</text>
+
+          <path d={pathFor("target_cumulative")} fill="none" stroke="#f97316" strokeWidth="3" strokeDasharray="8 6" strokeLinecap="round" strokeLinejoin="round" />
+          <path d={pathFor("previous_month_cumulative_sales")} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          <path d={pathFor("current_month_cumulative_sales")} fill="none" stroke="#16a34a" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+
+          {rows.map((row) => {
+            if (row.current_month_cumulative_sales === null || row.current_month_cumulative_sales === undefined) return null;
+            return (
+              <circle key={`c-${row.day_no}`} cx={x(Number(row.day_no))} cy={y(num(row.current_month_cumulative_sales))} r="4" fill="#16a34a">
+                <title>{`Day ${row.day_no}: Sales ${formatRs(num(row.current_month_daily_sales))}, COD returns ${formatRs(num(row.current_month_daily_returns))}, Daily net ${formatRs(num(row.current_month_daily_net_sales))}, Cumulative ${formatRs(num(row.current_month_cumulative_sales))}`}</title>
+              </circle>
+            );
+          })}
+        </svg>
+      </div>
+
+      <div className="mt-2 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-3">
+        <div className="rounded-[10px] bg-green-50 px-3 py-2 font-semibold text-green-700">Current: {formatRs(num(currentLast?.current_month_cumulative_sales))}</div>
+        <div className="rounded-[10px] bg-blue-50 px-3 py-2 font-semibold text-blue-700">Previous month: {formatRs(num(previousLast?.previous_month_cumulative_sales))}</div>
+        <div className="rounded-[10px] bg-orange-50 px-3 py-2 font-semibold text-orange-700">Target: {formatRs(target)}</div>
       </div>
     </div>
   );
