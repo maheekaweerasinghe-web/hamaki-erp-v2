@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import Financials from "@/components/Financials";
+import Banking from "@/components/Banking";
 
 type Product = {
   id: string;
@@ -40,7 +41,8 @@ type TabKey =
   | "dispatched7"
   | "stock"
   | "dashboard"
-  | "financials";
+  | "financials"
+  | "banking";
 
 type PendingOrderRow = {
   order_id: string;
@@ -95,6 +97,7 @@ const ROLE_TABS: Record<string, TabKey[]> = {
     "stock",
     "dashboard",
     "financials",
+    "banking",
   ],
   SALES: [
     "sales",
@@ -113,6 +116,7 @@ const ROLE_TABS: Record<string, TabKey[]> = {
     "stock",
     "dashboard",
     "financials",
+    "banking",
   ],
   MARKETING: [
     "dashboard",
@@ -2163,6 +2167,16 @@ async function handleSignOut() {
   </button>
 )}
 
+
+    {["ADMIN", "ACCOUNTANT"].includes(currentUser?.role || "") && (
+  <button
+    className={`nav-pill ${activeTab === "banking" ? "nav-pill-active" : "nav-pill-idle"}`}
+    onClick={() => setActiveTab("banking")}
+  >
+    Banking
+  </button>
+)}
+
     <div className="ml-auto">
       <button className="secondary-btn" onClick={() => void handleSignOut()}>
         Sign Out
@@ -3217,6 +3231,16 @@ async function handleSignOut() {
 {["ADMIN", "ACCOUNTANT"].includes(currentUser?.role || "") &&
   activeTab === "financials" && (
     <Financials
+      formatRs={formatRs}
+      showSuccess={showSuccess}
+      showError={showError}
+    />
+)}
+
+
+{["ADMIN", "ACCOUNTANT"].includes(currentUser?.role || "") &&
+  activeTab === "banking" && (
+    <Banking
       formatRs={formatRs}
       showSuccess={showSuccess}
       showError={showError}
