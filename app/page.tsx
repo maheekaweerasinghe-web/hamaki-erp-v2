@@ -326,6 +326,7 @@ const [stockStats, setStockStats] = useState({
 
   const [dashboardData, setDashboardData] = useState<any>({});
   const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [dashboardSalesTarget, setDashboardSalesTarget] = useState(8000000);
 
   const [newProductSku, setNewProductSku] = useState("");
   const [newProductType, setNewProductType] = useState("");
@@ -343,6 +344,22 @@ const allowedTabs = ROLE_TABS[roleKey] || [];
   useEffect(() => {
   setMessage("");
 }, [activeTab]);
+
+useEffect(() => {
+  const syncDashboardTarget = () => {
+    const saved = Number(window.localStorage.getItem("hamaki_financial_sales_target") || 8000000);
+    setDashboardSalesTarget(Number.isFinite(saved) && saved > 0 ? saved : 8000000);
+  };
+
+  syncDashboardTarget();
+  window.addEventListener("storage", syncDashboardTarget);
+  window.addEventListener("focus", syncDashboardTarget);
+
+  return () => {
+    window.removeEventListener("storage", syncDashboardTarget);
+    window.removeEventListener("focus", syncDashboardTarget);
+  };
+}, []);
 
 useEffect(() => {
   if (!currentUser) return;
@@ -1983,6 +2000,34 @@ async function handleSignOut() {
   }
 }
 
+  const dashboardMtdSales = Number(dashboardData?.mtd?.sales || 0);
+  const dashboardTarget = Math.max(1, Number(dashboardSalesTarget || 8000000));
+  const dashboardTargetProgress = Math.max(0, (dashboardMtdSales / dashboardTarget) * 100);
+  const dashboardNowParts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Colombo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const dashboardYear = Number(dashboardNowParts.find((part) => part.type === "year")?.value || new Date().getFullYear());
+  const dashboardMonth = Number(dashboardNowParts.find((part) => part.type === "month")?.value || new Date().getMonth() + 1);
+  const dashboardDay = Number(dashboardNowParts.find((part) => part.type === "day")?.value || new Date().getDate());
+  const dashboardDaysInMonth = new Date(Date.UTC(dashboardYear, dashboardMonth, 0)).getUTCDate();
+  const dashboardDaysRemaining = Math.max(0, dashboardDaysInMonth - dashboardDay);
+  const dashboardTargetGap = Math.max(0, dashboardTarget - dashboardMtdSales);
+  const dashboardRequiredDaily = dashboardDaysRemaining > 0 ? dashboardTargetGap / dashboardDaysRemaining : dashboardTargetGap;
+  const dashboardTargetPace = dashboardTarget * (dashboardDay / Math.max(1, dashboardDaysInMonth));
+  const dashboardOnTrack = dashboardMtdSales >= dashboardTargetPace;
+  const dashboardSalesPeople = [...(dashboardData?.salesperson || [])]
+    .map((row: any) => ({
+      ...row,
+      display_name: String(row.sales_person || row.sales_code || "Unknown"),
+      sales_value: Number(row.sales || 0),
+      order_count: Number(row.orders || 0),
+    }))
+    .filter((row: any) => row.sales_value > 0 || row.order_count > 0)
+    .sort((a: any, b: any) => b.sales_value - a.sales_value);
+
   return (
     <main className="min-h-screen bg-[var(--bg)]">
       {message && (
@@ -3058,6 +3103,87 @@ async function handleSignOut() {
             </div>
             <div className="mt-3 text-sm text-[var(--muted)]">
               Cancelled / total orders
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+          <div className="rounded-[18px] border border-[#d7dee8] bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <div className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[var(--muted)]">Monthly Sales Target</div>
+                <h3 className="mt-1 text-[22px] font-extrabold text-[var(--text)]">Target Chase</h3>
+                <div className="mt-1 text-[13px] text-[var(--muted)]">Created product sales only · shipping excluded</div>
+              </div>
+              <span className={`rounded-full border px-3 py-1 text-[11px] font-extrabold ${dashboardOnTrack ? "border-green-200 bg-green-50 text-green-700" : "border-orange-200 bg-orange-50 text-orange-700"}`}>
+                {dashboardOnTrack ? "ON TRACK" : "BEHIND PACE"}
+              </span>
+            </div>
+
+            <div className="mt-5 h-4 overflow-hidden rounded-full bg-[#e5ebf2]">
+              <div
+                className="h-full rounded-full bg-green-600 transition-all"
+                style={{ width: `${Math.min(100, dashboardTargetProgress)}%` }}
+              />
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[13px]">
+              <span className="font-extrabold text-green-700">{formatRs(dashboardMtdSales)} achieved</span>
+              <span className="font-bold text-[var(--muted)]">{formatRs(dashboardTarget)} target</span>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-[var(--muted)]">Progress</div>
+                <div className="mt-1 text-[21px] font-extrabold text-[var(--text)]">{dashboardTargetProgress.toFixed(1)}%</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-[var(--muted)]">Target Gap</div>
+                <div className="mt-1 text-[21px] font-extrabold text-orange-700">{formatRs(dashboardTargetGap)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-[var(--muted)]">Days Remaining</div>
+                <div className="mt-1 text-[21px] font-extrabold text-[var(--text)]">{dashboardDaysRemaining}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-[var(--muted)]">Need / Day</div>
+                <div className="mt-1 text-[21px] font-extrabold text-[var(--text)]">{formatRs(dashboardRequiredDaily)}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[18px] border border-[#d7dee8] bg-white p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-[18px] font-bold text-[var(--text)]">Sales Team Contribution</h3>
+                <div className="mt-1 text-[12px] text-[var(--muted)]">MTD share of created product sales</div>
+              </div>
+              <span className="rounded-full bg-[#f8fafc] px-3 py-1 text-[11px] font-bold text-[var(--muted)]">highest first</span>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              {dashboardSalesPeople.length ? dashboardSalesPeople.map((row: any, index: number) => {
+                const share = dashboardMtdSales > 0 ? (row.sales_value / dashboardMtdSales) * 100 : 0;
+                return (
+                  <div key={`${row.sales_code || row.display_name}-${index}`}>
+                    <div className="mb-1.5 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="mr-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#eaf0ff] px-2 text-[11px] font-extrabold text-[#2347a6]">#{index + 1}</span>
+                        <span className="font-extrabold text-[var(--text)]">{row.display_name}</span>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="text-[13px] font-extrabold text-[var(--text)]">{formatRs(row.sales_value)}</div>
+                        <div className="text-[11px] font-bold text-[var(--muted)]">{share.toFixed(1)}% · {row.order_count} orders</div>
+                      </div>
+                    </div>
+                    <div className="h-2.5 overflow-hidden rounded-full bg-[#e5ebf2]">
+                      <div className="h-full rounded-full bg-[#2749a5] transition-all" style={{ width: `${Math.min(100, Math.max(0, share))}%` }} />
+                    </div>
+                  </div>
+                );
+              }) : (
+                <div className="rounded-[14px] bg-[#f8fafc] p-4 text-[13px] text-[var(--muted)]">No salesperson sales recorded for this month yet.</div>
+              )}
             </div>
           </div>
         </div>
