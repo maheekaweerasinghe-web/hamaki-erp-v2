@@ -43,7 +43,7 @@ export default function Koombiyo({
   showError,
   showInfo,
 }: Props) {
-  const [subTab, setSubTab] = useState<"overview" | "scanner" | "status">("overview");
+  const [subTab, setSubTab] = useState<"overview" | "status">("overview");
   const [overview, setOverview] = useState<Overview>({
     labels_created: 0,
     awaiting_dispatch_scan: 0,
@@ -54,6 +54,7 @@ export default function Koombiyo({
   const [scanValue, setScanValue] = useState("");
   const [scanning, setScanning] = useState(false);
   const [lastScan, setLastScan] = useState<any>(null);
+  const [recentScans, setRecentScans] = useState<any[]>([]);
   const scanRef = useRef<HTMLInputElement | null>(null);
 
   const [query, setQuery] = useState("");
@@ -64,33 +65,36 @@ export default function Koombiyo({
 
   useEffect(() => {
     void loadOverview();
+    void loadRecentScans();
   }, []);
 
   useEffect(() => {
-    if (subTab !== "scanner") return;
+    if (subTab !== "overview") return;
     const t = window.setTimeout(() => {
       scanRef.current?.focus();
       scanRef.current?.select();
-    }, 80);
+    }, 100);
     return () => window.clearTimeout(t);
   }, [subTab]);
 
   async function loadOverview() {
     const { data, error } = await supabase.rpc("get_koombiyo_overview");
-
     if (error) {
       console.error("Koombiyo overview error:", error.message);
       return;
     }
-
     const row = Array.isArray(data) ? data[0] : data;
-
     setOverview({
       labels_created: Number(row?.labels_created || 0),
       awaiting_dispatch_scan: Number(row?.awaiting_dispatch_scan || 0),
       dispatched_today: Number(row?.dispatched_today || 0),
       total_koombiyo_orders: Number(row?.total_koombiyo_orders || 0),
     });
+  }
+
+  async function loadRecentScans() {
+    const { data, error } = await supabase.rpc("get_recent_dispatch_scans", { p_limit: 10 });
+    if (!error) setRecentScans(data || []);
   }
 
   async function handleScan() {
@@ -121,10 +125,10 @@ export default function Koombiyo({
       } else if (result?.result === "NOT_FOUND") {
         showError(`Waybill not found: ${waybill}`);
       } else {
-        showError(`Cannot dispatch this parcel. Status: ${result?.current_status || "unknown"}`);
+        showError(`Cannot dispatch parcel. Status: ${result?.current_status || "unknown"}`);
       }
 
-      await loadOverview();
+      await Promise.all([loadOverview(), loadRecentScans()]);
     } catch (err: any) {
       showError("Dispatch scan failed: " + (err?.message || "Unknown error"));
     } finally {
@@ -219,20 +223,19 @@ export default function Koombiyo({
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {[
-            ["overview", "Overview"],
-            ["scanner", "Dispatch Scanner"],
-            ["status", "Order Status"],
-          ].map(([key, label]) => (
-            <button
-              key={key}
-              className={subTab === key ? "primary-btn" : "secondary-btn"}
-              onClick={() => setSubTab(key as any)}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="flex gap-2">
+          <button
+            className={subTab === "overview" ? "primary-btn" : "secondary-btn"}
+            onClick={() => setSubTab("overview")}
+          >
+            Overview
+          </button>
+          <button
+            className={subTab === "status" ? "primary-btn" : "secondary-btn"}
+            onClick={() => setSubTab("status")}
+          >
+            Order Status
+          </button>
         </div>
       </div>
 
@@ -257,66 +260,89 @@ export default function Koombiyo({
             </div>
           </div>
 
-          <div className="mt-5 rounded-[16px] border border-[#d7dee8] bg-white p-4 text-sm text-[var(--muted)]">
-            Label creation and bulk printing will be connected in the next controlled step. The scanner and live tracking tools below are already isolated from the existing sales workflow.
-          </div>
-        </div>
-      )}
-
-      {subTab === "scanner" && (
-        <div>
-          <div className="mx-auto max-w-[720px]">
-            <label className="soft-label">Scan Koombiyo Waybill Barcode</label>
-            <input
-              ref={scanRef}
-              className="soft-input text-center text-[24px] font-bold"
-              value={scanValue}
-              onChange={(e) => setScanValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void handleScan();
-                }
-              }}
-              placeholder="Scanner ready..."
-              autoComplete="off"
-              disabled={scanning}
-            />
-
-            <div className="mt-2 text-center text-sm text-[var(--muted)]">
-              Scan the barcode. No mouse click is required between parcels.
-            </div>
-
-            {lastScan && (
-              <div
-                className={`mt-5 rounded-[16px] border p-5 ${
-                  lastScan.result === "DISPATCHED"
-                    ? "border-[#86efac] bg-[#f0fdf4]"
-                    : lastScan.result === "ALREADY_DISPATCHED"
-                      ? "border-[#fde68a] bg-[#fffbeb]"
-                      : "border-[#fecaca] bg-[#fef2f2]"
-                }`}
-              >
-                <div className="text-[22px] font-extrabold">
-                  {lastScan.result === "DISPATCHED"
-                    ? "✓ DISPATCHED"
-                    : lastScan.result === "ALREADY_DISPATCHED"
-                      ? "⚠ ALREADY DISPATCHED"
-                      : "✕ CHECK PARCEL"}
+          <div className="mt-5 rounded-[18px] border border-[#cbd5e1] bg-white p-5">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.1fr_.9fr]">
+              <div>
+                <div className="text-[19px] font-extrabold">Dispatch Scanner</div>
+                <div className="mt-1 text-sm text-[var(--muted)]">
+                  Scan the Koombiyo barcode after the packed parcel is physically ready to leave.
                 </div>
-                <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-                  <div><b>Waybill:</b> {lastScan.waybill_id || "-"}</div>
-                  <div><b>Order:</b> {lastScan.order_no || "-"}</div>
-                  <div><b>Customer:</b> {lastScan.customer_name || "-"}</div>
-                  <div><b>Status:</b> {lastScan.current_status || lastScan.result}</div>
-                  {lastScan.dispatched_at ? (
-                    <div className="md:col-span-2">
-                      <b>Dispatched:</b> {formatDateTime(lastScan.dispatched_at)}
+
+                <div className="mt-4">
+                  <label className="soft-label">Waybill Barcode</label>
+                  <input
+                    ref={scanRef}
+                    className="soft-input text-center text-[26px] font-extrabold"
+                    value={scanValue}
+                    onChange={(e) => setScanValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void handleScan();
+                      }
+                    }}
+                    placeholder="Scanner ready..."
+                    autoComplete="off"
+                    disabled={scanning}
+                  />
+                </div>
+
+                {lastScan && (
+                  <div
+                    className={`mt-4 rounded-[16px] border p-4 ${
+                      lastScan.result === "DISPATCHED"
+                        ? "border-[#86efac] bg-[#f0fdf4]"
+                        : lastScan.result === "ALREADY_DISPATCHED"
+                          ? "border-[#fde68a] bg-[#fffbeb]"
+                          : "border-[#fecaca] bg-[#fef2f2]"
+                    }`}
+                  >
+                    <div className="text-[21px] font-extrabold">
+                      {lastScan.result === "DISPATCHED"
+                        ? "✓ DISPATCHED"
+                        : lastScan.result === "ALREADY_DISPATCHED"
+                          ? "⚠ ALREADY DISPATCHED"
+                          : "✕ CHECK PARCEL"}
                     </div>
-                  ) : null}
+                    <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                      <div><b>Waybill:</b> {lastScan.waybill_id || "-"}</div>
+                      <div><b>Order:</b> {lastScan.order_no || "-"}</div>
+                      <div><b>Customer:</b> {lastScan.customer_name || "-"}</div>
+                      <div><b>Status:</b> {lastScan.current_status || lastScan.result}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="text-[19px] font-extrabold">Recent Scans</div>
+                <div className="mt-3 overflow-hidden rounded-[14px] border border-[#e5e7eb]">
+                  {recentScans.length === 0 ? (
+                    <div className="p-4 text-sm text-[var(--muted)]">No dispatch scans yet.</div>
+                  ) : (
+                    recentScans.map((scan: any, index: number) => (
+                      <div
+                        key={`${scan.scanned_at}-${index}`}
+                        className="border-b border-[#e5e7eb] p-3 last:border-b-0"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="font-bold">{scan.order_no || scan.waybill_id}</div>
+                          <div className="text-xs text-[var(--muted)]">
+                            {formatDateTime(scan.scanned_at)}
+                          </div>
+                        </div>
+                        <div className="mt-1 text-sm">
+                          {scan.result} · {scan.customer_name || "-"}
+                        </div>
+                        <div className="mt-1 text-xs text-[var(--muted)]">
+                          Waybill {scan.waybill_id}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
-            )}
+            </div>
           </div>
         </div>
       )}
@@ -336,7 +362,6 @@ export default function Koombiyo({
                 placeholder="e.g. 0771234567, S1-260905-0050 or 457824873"
               />
             </div>
-
             <button className="primary-btn" onClick={() => void searchOrders()} disabled={searching}>
               {searching ? "Searching..." : "Search"}
             </button>
@@ -399,26 +424,11 @@ export default function Koombiyo({
 
               <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div><b>Waybill:</b> {liveResult.hamaki.koombiyo_waybill_id}</div>
-                <div>
-                  <b>Live Status:</b>{" "}
-                  {liveResult.koombiyo?.order_details?.order_status || "-"}
-                </div>
-                <div>
-                  <b>Collected COD:</b>{" "}
-                  {liveResult.koombiyo?.order_details?.collected_cod || "-"}
-                </div>
-                <div>
-                  <b>Destination:</b>{" "}
-                  {liveResult.koombiyo?.branch_details?.destination_branch || "-"}
-                </div>
-                <div>
-                  <b>Weight:</b>{" "}
-                  {liveResult.koombiyo?.order_details?.weight || "-"}
-                </div>
-                <div>
-                  <b>Notification:</b>{" "}
-                  {liveResult.koombiyo?.order_details?.notification || "-"}
-                </div>
+                <div><b>Live Status:</b> {liveResult.koombiyo?.order_details?.order_status || "-"}</div>
+                <div><b>Collected COD:</b> {liveResult.koombiyo?.order_details?.collected_cod || "-"}</div>
+                <div><b>Destination:</b> {liveResult.koombiyo?.branch_details?.destination_branch || "-"}</div>
+                <div><b>Weight:</b> {liveResult.koombiyo?.order_details?.weight || "-"}</div>
+                <div><b>Notification:</b> {liveResult.koombiyo?.order_details?.notification || "-"}</div>
               </div>
 
               <div className="mt-6 text-[18px] font-bold">Timeline</div>
@@ -434,9 +444,7 @@ export default function Koombiyo({
                         {event?.order_status || event?.status || event?.status_name || "Status update"}
                       </div>
                       <div className="mt-1 text-sm text-[var(--muted)]">
-                        {[event?.branch_name, event?.reason, event?.remarks]
-                          .filter(Boolean)
-                          .join(" · ") || "-"}
+                        {[event?.branch_name, event?.reason, event?.remarks].filter(Boolean).join(" · ") || "-"}
                       </div>
                       <div className="mt-1 text-xs text-[var(--muted)]">
                         {formatDateTime(event?.status_date || event?.created_at)}

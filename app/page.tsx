@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import Financials from "@/components/Financials";
 import Banking from "@/components/Banking";
 import Koombiyo from "@/components/Koombiyo";
+import PendingOrdersV2 from "@/components/PendingOrdersV2";
 
 type Product = {
   id: string;
@@ -3808,144 +3809,16 @@ async function handleSignOut() {
                 </div>
       )}
 
-      {["ADMIN", "SALES", "ACCOUNTANT"].includes(currentUser?.role || "") && activeTab === "pending" && (
-        <div className="soft-card mt-4 p-5">
-          <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div>
-              <h2 className="text-[22px] font-bold text-[var(--text)]">Pending Orders</h2>
-              <div className="mt-1 text-sm text-[var(--muted)]">
-              </div>
-            </div>
-
-            <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row md:items-end">
-  <div className="min-w-[280px]">
-    <label className="soft-label">Search</label>
-    <input
-      className="soft-input"
-      value={pendingSearchPhone}
-      onChange={(e) => setPendingSearchPhone(e.target.value)}
-      placeholder="Type phone or order no"
-    />
-  </div>
-
-  <button
-    className="secondary-btn"
-    onClick={() => {
-      void fetchPendingOrders(pendingSearchPhone);
-    }}
-  >
-    Refresh
-  </button>
-
-  <button
-    className="rounded-[10px] bg-[#dcfce7] px-4 py-2 text-sm font-bold text-[#166534]"
-    onClick={() => {
-      void handleBulkPendingAction("DISPATCHED");
-    }}
-    disabled={bulkActing || selectedPendingIds.length === 0}
-  >
-    Dispatch Selected
-  </button>
-
-  <button
-    className="rounded-[10px] bg-[#fee2e2] px-4 py-2 text-sm font-bold text-[#b91c1c]"
-    onClick={() => {
-      void handleBulkPendingAction("CANCELLED");
-    }}
-    disabled={bulkActing || selectedPendingIds.length === 0}
-  >
-    Cancel Selected
-  </button>
-</div>
-          </div>
-
-          {pendingLoading ? (
-            <div className="rounded-[16px] border border-[#d7dee8] bg-white p-4 text-[16px] text-[#6b7280]">
-              Loading pending orders...
-            </div>
-          ) : pendingOrders.length === 0 ? (
-            <div className="rounded-[16px] border border-[#d7dee8] bg-white p-4 text-[16px] text-[#6b7280]">
-              No pending orders found
-            </div>
-          ) : (
-            <div className="overflow-x-auto rounded-[16px] border border-[#d7dee8] bg-white">
-  <table className="erp-table">
-    <thead>
-  <tr>
-    <th className="center">
-      <input
-        type="checkbox"
-        checked={
-          pendingOrders.length > 0 &&
-          pendingOrders.every((row) => selectedPendingIds.includes(row.order_id))
-        }
-        onChange={toggleSelectAllPending}
-      />
-    </th>
-    <th>Date</th>
-    <th>Order No</th>
-    <th>Customer</th>
-    <th>Phone</th>
-    <th>Address</th>
-    <th>City</th>
-    <th>Products</th>
-    <th className="num">Balance</th>
-    <th>Actions</th>
-  </tr>
-</thead>
-    <tbody>
-      {pendingOrders.map((row) => (
-        <tr key={row.order_id}>
-  <td className="center">
-    <input
-      type="checkbox"
-      checked={selectedPendingIds.includes(row.order_id)}
-      onChange={() => togglePendingSelection(row.order_id)}
-    />
-  </td>
-  <td>{formatDateTime(row.order_date || row.created_at)}</td>
-  <td className="font-bold">{row.order_no}</td>
-  <td>{row.customer_name || "-"}</td>
-  <td>
-    <div>{row.phone_primary || "-"}</div>
-    {row.phone_secondary ? (
-      <div className="text-xs text-[var(--muted)]">{row.phone_secondary}</div>
-    ) : null}
-  </td>
-  <td>{row.address || "-"}</td>
-  <td>{row.city || "-"}</td>
-  <td>{row.product_summary || "-"}</td>
-  <td className="num">{formatRs(Number(row.balance || 0))}</td>
-  <td>
-    <div className="flex gap-2">
-      <button
-        className="rounded-[10px] bg-[#dcfce7] px-3 py-1 text-sm font-bold text-[#166534]"
-        onClick={() => {
-          void handlePendingOrderAction(row.order_id, "DISPATCHED");
-        }}
-        disabled={actingOrderId === row.order_id || bulkActing}
-      >
-        Dispatch
-      </button>
-
-      <button
-        className="rounded-[10px] bg-[#fee2e2] px-3 py-1 text-sm font-bold text-[#b91c1c]"
-        onClick={() => {
-          void handlePendingOrderAction(row.order_id, "CANCELLED");
-        }}
-        disabled={actingOrderId === row.order_id || bulkActing}
-      >
-        Cancel
-      </button>
-    </div>
-  </td>
-</tr>
-      ))}
-    </tbody>
-  </table>
-</div>
-          )}
-        </div>
+      {["ADMIN", "SALES", "ACCOUNTANT"].includes(currentUser?.role || "") && activeTab === "pending" && currentUser && (
+        <PendingOrdersV2
+          currentUser={currentUser}
+          products={products}
+          formatDateTime={formatDateTime}
+          formatRs={formatRs}
+          showSuccess={showSuccess}
+          showError={showError}
+          showInfo={showInfo}
+        />
       )}
       {["ADMIN", "SALES", "ACCOUNTANT"].includes(currentUser?.role || "") && activeTab === "dispatchedToday" && (
   <div className="soft-card mt-4 p-5">
