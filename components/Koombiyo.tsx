@@ -55,6 +55,8 @@ export default function Koombiyo({
   const [scanning, setScanning] = useState(false);
   const [lastScan, setLastScan] = useState<any>(null);
   const [recentScans, setRecentScans] = useState<any[]>([]);
+  const [scannerLive, setScannerLive] = useState<any>(null);
+  const [scannerLiveLoading, setScannerLiveLoading] = useState(false);
   const scanRef = useRef<HTMLInputElement | null>(null);
 
   const [query, setQuery] = useState("");
@@ -97,6 +99,55 @@ export default function Koombiyo({
     if (!error) setRecentScans(data || []);
   }
 
+
+  async function loadScannerLiveStatus(waybillId: string) {
+    if (!waybillId) {
+      setScannerLive(null);
+      return;
+    }
+
+    try {
+      setScannerLiveLoading(true);
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) return;
+
+      const response = await fetch("/api/koombiyo/order-status", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ waybill_id: waybillId }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setScannerLive({
+          waybill_id: waybillId,
+          details: result?.details || null,
+          timeline: result?.timeline || [],
+        });
+      } else {
+        setScannerLive({
+          waybill_id: waybillId,
+          error: result?.message || "Live status unavailable",
+        });
+      }
+    } catch (err: any) {
+      setScannerLive({
+        waybill_id: waybillId,
+        error: err?.message || "Live status unavailable",
+      });
+    } finally {
+      setScannerLiveLoading(false);
+    }
+  }
+
   async function handleScan() {
     const waybill = scanValue.trim();
     if (!waybill || scanning) return;
@@ -129,6 +180,10 @@ export default function Koombiyo({
       }
 
       await Promise.all([loadOverview(), loadRecentScans()]);
+
+      if (result?.order_no && waybill) {
+        void loadScannerLiveStatus(waybill);
+      }
     } catch (err: any) {
       showError("Dispatch scan failed: " + (err?.message || "Unknown error"));
     } finally {
@@ -261,7 +316,7 @@ export default function Koombiyo({
           </div>
 
           <div className="mt-5 rounded-[18px] border border-[#cbd5e1] bg-white p-5">
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.1fr_.9fr]">
+            <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1.15fr_.85fr]">
               <div>
                 <div className="text-[19px] font-extrabold">Dispatch Scanner</div>
                 <div className="mt-1 text-sm text-[var(--muted)]">
@@ -272,7 +327,7 @@ export default function Koombiyo({
                   <label className="soft-label">Waybill Barcode</label>
                   <input
                     ref={scanRef}
-                    className="soft-input text-center text-[26px] font-extrabold"
+                    className="soft-input h-[52px] text-center text-[24px] font-extrabold"
                     value={scanValue}
                     onChange={(e) => setScanValue(e.target.value)}
                     onKeyDown={(e) => {
@@ -308,40 +363,126 @@ export default function Koombiyo({
                       <div><b>Waybill:</b> {lastScan.waybill_id || "-"}</div>
                       <div><b>Order:</b> {lastScan.order_no || "-"}</div>
                       <div><b>Customer:</b> {lastScan.customer_name || "-"}</div>
-                      <div><b>Status:</b> {lastScan.current_status || lastScan.result}</div>
+                      <div><b>Hamaki Status:</b> {lastScan.current_status || lastScan.result}</div>
                     </div>
                   </div>
                 )}
               </div>
 
-              <div>
-                <div className="text-[19px] font-extrabold">Recent Scans</div>
-                <div className="mt-3 overflow-hidden rounded-[14px] border border-[#e5e7eb]">
-                  {recentScans.length === 0 ? (
-                    <div className="p-4 text-sm text-[var(--muted)]">No dispatch scans yet.</div>
-                  ) : (
-                    recentScans.map((scan: any, index: number) => (
-                      <div
-                        key={`${scan.scanned_at}-${index}`}
-                        className="border-b border-[#e5e7eb] p-3 last:border-b-0"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="font-bold">{scan.order_no || scan.waybill_id}</div>
-                          <div className="text-xs text-[var(--muted)]">
-                            {formatDateTime(scan.scanned_at)}
+              <div className="h-full rounded-[16px] border border-[#e2e8f0] bg-[#f8fafc] p-4">
+                <div className="text-[19px] font-extrabold">Live Status</div>
+                <div className="mt-1 text-sm text-[var(--muted)]">
+                  Latest Koombiyo status for the parcel just scanned.
+                </div>
+
+                {scannerLiveLoading ? (
+                  <div className="mt-5 text-sm text-[var(--muted)]">Loading live status...</div>
+                ) : scannerLive ? (
+                  <div className="mt-4 space-y-3">
+                    <div>
+                      <div className="text-xs text-[var(--muted)]">Waybill</div>
+                      <div className="font-bold">{scannerLive.waybill_id}</div>
+                    </div>
+
+                    {scannerLive.error ? (
+                      <div className="rounded-[12px] border border-[#fde68a] bg-[#fffbeb] p-3 text-sm">
+                        {scannerLive.error}
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <div className="text-xs text-[var(--muted)]">Koombiyo Status</div>
+                          <div className="text-[18px] font-extrabold">
+                            {scannerLive.details?.order_details?.order_status || "-"}
                           </div>
                         </div>
-                        <div className="mt-1 text-sm">
-                          {scan.result} · {scan.customer_name || "-"}
+
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <div className="text-xs text-[var(--muted)]">Destination</div>
+                            <div className="font-semibold">
+                              {scannerLive.details?.branch_details?.destination_branch || "-"}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-[var(--muted)]">COD</div>
+                            <div className="font-semibold">
+                              {scannerLive.details?.order_details?.collected_cod || "-"}
+                            </div>
+                          </div>
                         </div>
-                        <div className="mt-1 text-xs text-[var(--muted)]">
-                          Waybill {scan.waybill_id}
-                        </div>
-                      </div>
-                    ))
-                  )}
+
+                        {Array.isArray(scannerLive.timeline) && scannerLive.timeline[0] ? (
+                          <div className="rounded-[12px] border border-[#e2e8f0] bg-white p-3">
+                            <div className="text-xs font-bold text-[var(--muted)]">Latest Update</div>
+                            <div className="mt-1 font-bold">
+                              {scannerLive.timeline[0]?.order_status ||
+                                scannerLive.timeline[0]?.status ||
+                                scannerLive.timeline[0]?.status_name ||
+                                "Status update"}
+                            </div>
+                            <div className="mt-1 text-xs text-[var(--muted)]">
+                              {[
+                                scannerLive.timeline[0]?.branch_name,
+                                scannerLive.timeline[0]?.reason,
+                                scannerLive.timeline[0]?.remarks,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ") || "-"}
+                            </div>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-5 rounded-[12px] border border-dashed border-[#cbd5e1] bg-white p-4 text-sm text-[var(--muted)]">
+                    Scan a parcel to show its live Koombiyo status here.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 border-t border-[#e2e8f0] pt-5">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[19px] font-extrabold">Recent Scans</div>
+                  <div className="mt-1 text-sm text-[var(--muted)]">
+                    Latest physical dispatch verification activity.
+                  </div>
                 </div>
               </div>
+
+              {recentScans.length === 0 ? (
+                <div className="rounded-[14px] border border-[#e5e7eb] bg-[#f8fafc] p-4 text-sm text-[var(--muted)]">
+                  No dispatch scans yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-[14px] border border-[#e5e7eb]">
+                  <table className="erp-table">
+                    <thead>
+                      <tr>
+                        <th>Time</th>
+                        <th>Order</th>
+                        <th>Customer</th>
+                        <th>Waybill</th>
+                        <th>Result</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentScans.map((scan: any, index: number) => (
+                        <tr key={`${scan.scanned_at}-${index}`}>
+                          <td>{formatDateTime(scan.scanned_at)}</td>
+                          <td className="font-bold">{scan.order_no || "-"}</td>
+                          <td>{scan.customer_name || "-"}</td>
+                          <td>{scan.waybill_id}</td>
+                          <td className="font-bold">{scan.result}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </div>

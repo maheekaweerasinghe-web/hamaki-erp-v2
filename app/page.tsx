@@ -228,6 +228,13 @@ const [authSubmitting, setAuthSubmitting] = useState(false);
   const [phone2, setPhone2] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
+  const [salesKoombiyoDistricts, setSalesKoombiyoDistricts] = useState<any[]>([]);
+  const [salesKoombiyoCities, setSalesKoombiyoCities] = useState<any[]>([]);
+  const [salesKoombiyoDistrictId, setSalesKoombiyoDistrictId] = useState("");
+  const [salesKoombiyoDistrictName, setSalesKoombiyoDistrictName] = useState("");
+  const [salesKoombiyoCityId, setSalesKoombiyoCityId] = useState("");
+  const [salesKoombiyoCityName, setSalesKoombiyoCityName] = useState("");
+  const [salesLocationLoading, setSalesLocationLoading] = useState(false);
   const [retailWholesale, setRetailWholesale] = useState("Retail");
   const [salePlatform, setSalePlatform] = useState("Facebook");
   const [transactionType, setTransactionType] = useState("COD");
@@ -588,6 +595,11 @@ useEffect(() => {
   if (activeTab !== "dashboard") return;
   void loadDashboard();
 }, [activeTab]);
+
+useEffect(() => {
+  if (activeTab !== "sales" || !currentUser) return;
+  void loadSalesKoombiyoDistricts();
+}, [activeTab, currentUser]);
 
 useEffect(() => {
   if (activeTab !== "rm") return;
@@ -981,6 +993,11 @@ async function loadRecentInventoryMovements() {
     setPhone2("");
     setAddress("");
     setCity("");
+    setSalesKoombiyoDistrictId("");
+    setSalesKoombiyoDistrictName("");
+    setSalesKoombiyoCityId("");
+    setSalesKoombiyoCityName("");
+    setSalesKoombiyoCities([]);
     setRetailWholesale("Retail");
     setSalePlatform("Facebook");
     setTransactionType("COD");
@@ -1822,6 +1839,77 @@ async function fetchDispatchedOrdersLast7Days(phoneQuery = "") {
   }
 }
 
+
+  async function getCurrentSessionToken() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) throw new Error("No active session");
+    return session.access_token;
+  }
+
+  async function loadSalesKoombiyoDistricts() {
+    if (salesKoombiyoDistricts.length > 0 || salesLocationLoading) return;
+
+    try {
+      setSalesLocationLoading(true);
+      const token = await getCurrentSessionToken();
+
+      const res = await fetch("/api/koombiyo/locations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({}),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result?.message || "Could not load Koombiyo districts");
+      }
+
+      setSalesKoombiyoDistricts(result?.districts || []);
+    } catch (err: any) {
+      console.error("Sales Koombiyo districts load failed:", err);
+    } finally {
+      setSalesLocationLoading(false);
+    }
+  }
+
+  async function loadSalesKoombiyoCities(districtId: string) {
+    setSalesKoombiyoCities([]);
+    if (!districtId) return;
+
+    try {
+      setSalesLocationLoading(true);
+      const token = await getCurrentSessionToken();
+
+      const res = await fetch("/api/koombiyo/locations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ district_id: districtId }),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result?.message || "Could not load Koombiyo cities");
+      }
+
+      setSalesKoombiyoCities(result?.cities || []);
+    } catch (err: any) {
+      showError("Koombiyo cities load failed: " + (err?.message || "Unknown error"));
+    } finally {
+      setSalesLocationLoading(false);
+    }
+  }
+
   async function handleSubmitOrder() {
   if (!cart.length) {
     setMessage("Cart is empty");
@@ -1897,7 +1985,7 @@ async function fetchDispatchedOrdersLast7Days(phoneQuery = "") {
       p_phone_primary: phone1 || null,
       p_phone_secondary: phone2 || null,
       p_address_snapshot: address || null,
-      p_city_snapshot: city || null,
+      p_city_snapshot: salesKoombiyoCityName || city || null,
       p_retail_wholesale: retailWholesale || null,
       p_sale_platform: salePlatform || null,
       p_transaction_type: transactionType || null,
@@ -1923,7 +2011,50 @@ async function fetchDispatchedOrdersLast7Days(phoneQuery = "") {
     const saved = Array.isArray(data) ? data[0] : data;
     const savedOrderNo = saved?.order_no || orderNo;
 
-    showSuccess(`Order saved successfully ✅ ${savedOrderNo}`);
+    let locationSaved = true;
+
+    if (salesKoombiyoDistrictId && salesKoombiyoCityId) {
+      let savedOrderId = saved?.order_id || saved?.id || null;
+
+      if (!savedOrderId) {
+        const { data: orderRow, error: orderLookupError } = await supabase
+          .from("orders")
+          .select("id")
+          .eq("order_no", savedOrderNo)
+          .single();
+
+        if (orderLookupError) {
+          locationSaved = false;
+          console.error("Could not find newly saved order for Koombiyo location:", orderLookupError);
+        } else {
+          savedOrderId = orderRow?.id || null;
+        }
+      }
+
+      if (savedOrderId) {
+        const { error: locationError } = await supabase.rpc(
+          "set_pending_order_koombiyo_location",
+          {
+            p_order_id: savedOrderId,
+            p_district_id: salesKoombiyoDistrictId,
+            p_district_name: salesKoombiyoDistrictName || null,
+            p_city_id: salesKoombiyoCityId,
+            p_city_name: salesKoombiyoCityName || null,
+          }
+        );
+
+        if (locationError) {
+          locationSaved = false;
+          console.error("Koombiyo location save failed:", locationError);
+        }
+      }
+    }
+
+    if (locationSaved) {
+      showSuccess(`Order saved successfully ✅ ${savedOrderNo}`);
+    } else {
+      showInfo(`Order saved ✅ ${savedOrderNo} — Koombiyo location needs confirmation in Pending Orders`);
+    }
 
     setSaleDate(todayDisplayLK());
     setCustomerName("");
@@ -1931,6 +2062,11 @@ async function fetchDispatchedOrdersLast7Days(phoneQuery = "") {
     setPhone2("");
     setAddress("");
     setCity("");
+    setSalesKoombiyoDistrictId("");
+    setSalesKoombiyoDistrictName("");
+    setSalesKoombiyoCityId("");
+    setSalesKoombiyoCityName("");
+    setSalesKoombiyoCities([]);
     setRetailWholesale("Retail");
     setSalePlatform("Facebook");
     setTransactionType("COD");
@@ -3466,7 +3602,7 @@ async function handleSignOut() {
   </div>
 )}
 
-          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-[1.6fr_0.8fr_0.8fr_0.8fr]">
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-[1.35fr_0.8fr_0.9fr_0.7fr_0.75fr]">
   <div>
     <label className="soft-label">Address</label>
     <input
@@ -3478,13 +3614,60 @@ async function handleSignOut() {
   </div>
 
   <div>
-    <label className="soft-label">City</label>
-    <input
+    <label className="soft-label">Koombiyo District</label>
+    <select
       className="soft-input"
-      value={city}
-      onChange={(e) => setCity(e.target.value)}
-      placeholder="City"
-    />
+      value={salesKoombiyoDistrictId}
+      disabled={salesLocationLoading}
+      onFocus={() => void loadSalesKoombiyoDistricts()}
+      onChange={(e) => {
+        const id = e.target.value;
+        const district = salesKoombiyoDistricts.find(
+          (d: any) => String(d.district_id) === id
+        );
+
+        setSalesKoombiyoDistrictId(id);
+        setSalesKoombiyoDistrictName(String(district?.district_name || ""));
+        setSalesKoombiyoCityId("");
+        setSalesKoombiyoCityName("");
+        setCity("");
+        void loadSalesKoombiyoCities(id);
+      }}
+    >
+      <option value="">Select district</option>
+      {salesKoombiyoDistricts.map((d: any) => (
+        <option key={d.district_id} value={d.district_id}>
+          {d.district_name}
+        </option>
+      ))}
+    </select>
+  </div>
+
+  <div>
+    <label className="soft-label">Koombiyo City</label>
+    <select
+      className="soft-input"
+      value={salesKoombiyoCityId}
+      disabled={!salesKoombiyoDistrictId || salesLocationLoading}
+      onChange={(e) => {
+        const id = e.target.value;
+        const selectedCity = salesKoombiyoCities.find(
+          (c: any) => String(c.city_id) === id
+        );
+
+        const name = String(selectedCity?.city_name || "");
+        setSalesKoombiyoCityId(id);
+        setSalesKoombiyoCityName(name);
+        setCity(name);
+      }}
+    >
+      <option value="">Select city</option>
+      {salesKoombiyoCities.map((c: any) => (
+        <option key={c.city_id} value={c.city_id}>
+          {c.city_name}
+        </option>
+      ))}
+    </select>
   </div>
 
   <div>

@@ -737,9 +737,9 @@ export default function PendingOrdersV2({
                         )}
                       </td>
                       <td>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-col gap-2">
                           <button
-                            className="secondary-btn"
+                            className="secondary-btn h-10 w-[145px] whitespace-nowrap text-[13px]"
                             disabled={locked || actingId === row.order_id}
                             onClick={() => void openEdit(row.order_id)}
                             title={locked ? "Editing is locked after Koombiyo waybill creation" : "Edit order"}
@@ -749,7 +749,7 @@ export default function PendingOrdersV2({
 
                           {!locked ? (
                             <button
-                              className="primary-btn"
+                              className="primary-btn h-10 w-[145px] whitespace-nowrap text-[13px]"
                               disabled={actingId === row.order_id || bulkActing}
                               onClick={() => void createShipment(row)}
                             >
@@ -757,7 +757,7 @@ export default function PendingOrdersV2({
                             </button>
                           ) : (
                             <button
-                              className="secondary-btn"
+                              className="secondary-btn h-10 w-[145px] whitespace-nowrap text-[13px]"
                               onClick={() => void printWaybills([row.koombiyo_waybill_id!])}
                             >
                               Print Label
@@ -765,7 +765,7 @@ export default function PendingOrdersV2({
                           )}
 
                           <button
-                            className="rounded-[10px] bg-[#fee2e2] px-3 py-2 text-sm font-bold text-[#b91c1c]"
+                            className="h-10 w-[145px] whitespace-nowrap rounded-[10px] bg-[#fee2e2] px-3 text-[13px] font-bold text-[#b91c1c]"
                             disabled={locked || actingId === row.order_id || bulkActing}
                             onClick={() => void cancelOrder(row)}
                             title={locked ? "Cancel Koombiyo shipment first" : "Cancel order"}
