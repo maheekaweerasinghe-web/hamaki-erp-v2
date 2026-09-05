@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import Financials from "@/components/Financials";
 import Banking from "@/components/Banking";
+import Koombiyo from "@/components/Koombiyo";
 
 type Product = {
   id: string;
@@ -42,7 +43,8 @@ type TabKey =
   | "stock"
   | "dashboard"
   | "financials"
-  | "banking";
+  | "banking"
+  | "koombiyo";
 
 type PendingOrderRow = {
   order_id: string;
@@ -94,6 +96,7 @@ const ROLE_TABS: Record<string, TabKey[]> = {
     "pending",
     "dispatchedToday",
     "dispatched7",
+    "koombiyo",
     "stock",
     "dashboard",
     "financials",
@@ -104,6 +107,7 @@ const ROLE_TABS: Record<string, TabKey[]> = {
     "pending",
     "dispatchedToday",
     "dispatched7",
+    "koombiyo",
     "dashboard",
   ],
   ACCOUNTANT: [
@@ -113,6 +117,7 @@ const ROLE_TABS: Record<string, TabKey[]> = {
     "pending",
     "dispatchedToday",
     "dispatched7",
+    "koombiyo",
     "stock",
     "dashboard",
     "financials",
@@ -2194,6 +2199,15 @@ async function handleSignOut() {
       </button>
     )}
 
+    {["ADMIN", "SALES", "ACCOUNTANT"].includes(currentUser?.role || "") && (
+      <button
+        className={`nav-pill ${activeTab === "koombiyo" ? "nav-pill-active" : "nav-pill-idle"}`}
+        onClick={() => setActiveTab("koombiyo")}
+      >
+        Koombiyo
+      </button>
+    )}
+
     {["ADMIN", "SALES", "ACCOUNTANT", "MARKETING"].includes(currentUser?.role || "") && (
       <button
         className={`nav-pill ${activeTab === "dashboard" ? "nav-pill-active" : "nav-pill-idle"}`}
@@ -2235,47 +2249,8 @@ async function handleSignOut() {
   {loadingUser ? "Loading user..." : (message || "Ready ✅")}
 </div>
 
-<button
-  className="secondary-btn mt-3"
-  onClick={async () => {
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
 
-      if (!session) {
-        showError("No active session");
-        return;
-      }
 
-      const res = await fetch("/api/koombiyo/test", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      const result = await res.json();
-
-      if (!res.ok) {
-        showError(result?.message || "Koombiyo test failed");
-        return;
-      }
-
-      showSuccess(
-        `Koombiyo connected ✅ Districts: ${result.district_count}`
-      );
-    } catch (err: any) {
-      showError(
-        "Koombiyo test failed: " +
-          (err?.message || "Unknown error")
-      );
-    }
-  }}
->
-  Test Koombiyo Connection
-</button>
- 
 
 {(currentUser?.role === "ADMIN" || currentUser?.role === "ACCOUNTANT") && activeTab === "rm" && (
   <div className="soft-card mt-4 p-5">
@@ -3393,6 +3368,18 @@ async function handleSignOut() {
       </>
     )}
   </div>
+)}
+
+
+{["ADMIN", "SALES", "ACCOUNTANT"].includes(currentUser?.role || "") &&
+  activeTab === "koombiyo" && currentUser && (
+    <Koombiyo
+      currentUserId={currentUser.id}
+      formatDateTime={formatDateTime}
+      showSuccess={showSuccess}
+      showError={showError}
+      showInfo={showInfo}
+    />
 )}
 
 {["ADMIN", "ACCOUNTANT"].includes(currentUser?.role || "") &&
