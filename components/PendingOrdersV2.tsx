@@ -1122,25 +1122,59 @@ export default function PendingOrdersV2({
   }
 
   async function cancelOrder(row: PendingRow) {
-    if (row.koombiyo_waybill_id) {
-      showError("This order already has a Koombiyo waybill. Do not cancel it from Hamaki until the Koombiyo shipment is cancelled.");
-      return;
-    }
+    const hasKoombiyo = Boolean(row.koombiyo_waybill_id);
 
-    if (!window.confirm(`Cancel ${row.order_no}? Stock will be returned.`)) return;
+    const confirmation = hasKoombiyo
+      ? `Cancel Koombiyo shipment ${row.koombiyo_waybill_id} for ${row.order_no}?\n\nThis will only succeed while Koombiyo still allows the shipment to be deleted. If successful, Hamaki will cancel the order and return its items to stock.`
+      : `Cancel ${row.order_no}? Stock will be returned.`;
+
+    if (!window.confirm(confirmation)) return;
 
     try {
       setActingId(row.order_id);
 
-      const { error } = await supabase.rpc("update_order_status", {
-        p_order_id: row.order_id,
-        p_new_status: "CANCELLED",
-        p_action_by_user_id: currentUser.id,
-      });
+      if (hasKoombiyo) {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
 
-      if (error) throw new Error(error.message);
+        if (!session) {
+          throw new Error("No active session");
+        }
 
-      showSuccess(`Order ${row.order_no} cancelled ✅`);
+        const res = await fetch("/api/koombiyo/cancel-order", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ order_id: row.order_id }),
+        });
+
+        const result = await res.json();
+
+        if (!res.ok) {
+          throw new Error(
+            result?.message ||
+              "Koombiyo no longer allows this shipment to be cancelled."
+          );
+        }
+
+        showSuccess(
+          `Koombiyo shipment cancelled ✅ ${row.order_no} · Stock returned`
+        );
+      } else {
+        const { error } = await supabase.rpc("update_order_status", {
+          p_order_id: row.order_id,
+          p_new_status: "CANCELLED",
+          p_action_by_user_id: currentUser.id,
+        });
+
+        if (error) throw new Error(error.message);
+
+        showSuccess(`Order ${row.order_no} cancelled ✅ Stock returned`);
+      }
+
       await loadPending(query);
     } catch (err: any) {
       showError("Cancel failed: " + (err?.message || "Unknown error"));
@@ -1300,11 +1334,19 @@ export default function PendingOrdersV2({
 
                           <button
                             className="h-10 w-[145px] whitespace-nowrap rounded-[10px] bg-[#fee2e2] px-3 text-[13px] font-bold text-[#b91c1c]"
-                            disabled={locked || actingId === row.order_id || bulkActing}
+                            disabled={actingId === row.order_id || bulkActing}
                             onClick={() => void cancelOrder(row)}
-                            title={locked ? "Cancel Koombiyo shipment first" : "Cancel order"}
+                            title={
+                              locked
+                                ? "Cancel the Koombiyo shipment while it is still deletable"
+                                : "Cancel order"
+                            }
                           >
-                            Cancel
+                            {actingId === row.order_id
+                              ? "Cancelling..."
+                              : locked
+                                ? "Cancel Shipment"
+                                : "Cancel"}
                           </button>
                         </div>
                       </td>
