@@ -104,6 +104,210 @@ function lineTotal(item: EditItem) {
   return n(item.qty) * n(item.unit_price) + n(item.extra_price) - n(item.discount);
 }
 
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function code128Svg(value: string, height = 54) {
+  const patterns = [
+    "212222","222122","222221","121223","121322","131222","122213","122312",
+    "132212","221213","221312","231212","112232","122132","122231","113222",
+    "123122","123221","223211","221132","221231","213212","223112","312131",
+    "311222","321122","321221","312212","322112","322211","212123","212321",
+    "232121","111323","131123","131321","112313","132113","132311","211313",
+    "231113","231311","112133","112331","132131","113123","113321","133121",
+    "313121","211331","231131","213113","213311","213131","311123","311321",
+    "331121","312113","312311","332111","314111","221411","431111","111224",
+    "111422","121124","121421","141122","141221","112214","112412","122114",
+    "122411","142112","142211","241211","221114","413111","241112","134111",
+    "111242","121142","121241","114212","124112","124211","411212","421112",
+    "421211","212141","214121","412121","111143","111341","131141","114113",
+    "114311","411113","411311","113141","114131","311141","411131","211412",
+    "211214","211232","2331112"
+  ];
+
+  const text = String(value || "");
+  const values = [...text].map((ch) => {
+    const code = ch.charCodeAt(0);
+    if (code < 32 || code > 126) return 0;
+    return code - 32;
+  });
+
+  let checksum = 104;
+  values.forEach((v, i) => {
+    checksum += v * (i + 1);
+  });
+  checksum %= 103;
+
+  const sequence = [104, ...values, checksum, 106];
+  const quiet = 10;
+  const moduleWidth = 1.45;
+
+  let modules = quiet * 2;
+  for (const code of sequence) {
+    const pattern = patterns[code];
+    for (const d of pattern) modules += Number(d);
+  }
+
+  let x = quiet;
+  const rects: string[] = [];
+
+  for (const code of sequence) {
+    const pattern = patterns[code];
+    let bar = true;
+
+    for (const d of pattern) {
+      const w = Number(d);
+      if (bar) {
+        rects.push(
+          `<rect x="${x * moduleWidth}" y="0" width="${w * moduleWidth}" height="${height}" fill="#000"/>`
+        );
+      }
+      x += w;
+      bar = !bar;
+    }
+  }
+
+  return `
+    <svg xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 ${modules * moduleWidth} ${height}"
+      preserveAspectRatio="none"
+      aria-label="Barcode ${escapeHtml(text)}">
+      ${rects.join("")}
+    </svg>
+  `;
+}
+
+function shippingLabelHtml(order: any) {
+  const items = Array.isArray(order.items) ? order.items : [];
+
+  const description =
+    items.length > 0
+      ? items
+          .map((item: any) =>
+            [
+              item.product_type_snapshot,
+              item.material_snapshot,
+              item.color_snapshot,
+              item.size_snapshot,
+              `x${Number(item.qty || 0).toString()}`,
+            ]
+              .filter(Boolean)
+              .join(" ")
+          )
+          .join(", ")
+      : String(order.product_summary || "");
+
+  const pieces =
+    items.length > 0
+      ? items.reduce((sum: number, item: any) => sum + Number(item.qty || 0), 0)
+      : "";
+
+  const waybill = String(order.koombiyo_waybill_id || "");
+  const phone = String(order.phone_primary || order.phone_secondary || "");
+  const address = [
+    String(order.address_snapshot || order.address || "").trim(),
+    String(order.koombiyo_city_name || order.city_snapshot || order.city || "").trim(),
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const date = String(order.order_date || "").slice(0, 10);
+  const cod = Number(order.balance || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  return `
+    <section class="shipping-label">
+      <div class="brand">
+        <div class="brand-main">HAMAKI</div>
+        <div class="brand-sub">APPAREL (PVT) LTD</div>
+      </div>
+
+      <div class="from-row">
+        <div class="field-title">FROM :</div>
+        <div class="from-details">
+          <strong>HAMAKI APPAREL</strong>
+          <span>771171771</span>
+        </div>
+      </div>
+
+      <div class="barcode-top">
+        ${code128Svg(waybill, 58)}
+        <div class="barcode-number">${escapeHtml(waybill)}</div>
+      </div>
+
+      <div class="waybill-row">
+        <span class="field-title">WAYBILL NO :</span>
+        <strong>${escapeHtml(waybill)}</strong>
+      </div>
+
+      <div class="to-row">
+        <div class="field-title">TO :</div>
+        <div class="to-details">
+          <strong>${escapeHtml(order.customer_name_snapshot || order.customer_name || "-")}</strong>
+          <div>${escapeHtml(address || "-")}</div>
+        </div>
+      </div>
+
+      <div class="single-row">
+        <span class="field-title">PHONE :</span>
+        <strong>${escapeHtml(phone || "-")}</strong>
+      </div>
+
+      <div class="description-row">
+        <span class="field-title">DESCRIPTION :</span>
+        <span>${escapeHtml(description || "-")}</span>
+      </div>
+
+      <div class="details-grid">
+        <div class="left-details">
+          <div class="detail-line">
+            <span class="field-title">ORDER NO :</span>
+            <strong>${escapeHtml(order.order_no || "-")}</strong>
+          </div>
+          <div class="detail-line">
+            <span class="field-title">WEIGHT :</span>
+            <strong>1.00 kg</strong>
+          </div>
+          <div class="detail-line">
+            <span class="field-title">PIECES :</span>
+            <strong>${escapeHtml(pieces || "-")}</strong>
+          </div>
+        </div>
+
+        <div class="cod-box">
+          <div class="field-title">COD AMOUNT :</div>
+          <div class="cod-value">Rs. ${escapeHtml(cod)}</div>
+        </div>
+      </div>
+
+      <div class="note-row">
+        <span class="field-title">NOTE :</span>
+      </div>
+
+      <div class="bottom-row">
+        <div class="date-box">
+          <strong>Date :</strong>
+          <span>${escapeHtml(date || "-")}</span>
+        </div>
+
+        <div class="barcode-bottom">
+          ${code128Svg(waybill, 42)}
+        </div>
+      </div>
+
+      <div class="inquiry">For Inquiry : 0117 886 786</div>
+    </section>
+  `;
+}
+
 export default function PendingOrdersV2({
   currentUser,
   products,
@@ -542,48 +746,365 @@ export default function PendingOrdersV2({
     }
   }
 
-  async function printWaybills(waybills: string[]) {
-    const ids = waybills.filter(Boolean);
-    if (!ids.length) {
+  async function printShippingLabels(orderRows: PendingRow[]) {
+    const printable = orderRows.filter((row) => row.koombiyo_waybill_id);
+
+    if (!printable.length) {
       showError("No Koombiyo labels selected");
       return;
     }
 
     const printWindow = window.open("", "_blank");
-    if (printWindow) {
-      printWindow.document.write("<p style='font-family:sans-serif;padding:20px'>Preparing thermal labels...</p>");
+
+    if (!printWindow) {
+      showError("Browser blocked the print window. Allow pop-ups for the ERP and try again.");
+      return;
     }
 
+    printWindow.document.write(
+      "<p style='font-family:Arial,sans-serif;padding:20px'>Preparing Hamaki shipping labels...</p>"
+    );
+
     try {
-      const token = await getSessionToken();
+      const details = await Promise.all(
+        printable.map(async (row) => {
+          const { data, error } = await supabase.rpc("get_pending_order_details", {
+            p_order_id: row.order_id,
+          });
 
-      const res = await fetch("/api/koombiyo/labels", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ waybill_ids: ids }),
-      });
+          if (error) {
+            console.error("Label detail load failed:", row.order_no, error.message);
+            return {
+              ...row,
+              customer_name_snapshot: row.customer_name,
+              address_snapshot: row.address,
+              city_snapshot: row.city,
+              items: [],
+            };
+          }
 
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({}));
-        throw new Error(error?.message || "Label generation failed");
+          return {
+            ...(data || {}),
+            koombiyo_waybill_id:
+              (data as any)?.koombiyo_waybill_id || row.koombiyo_waybill_id,
+            product_summary: row.product_summary,
+          };
+        })
+      );
+
+      const html = `
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Hamaki Shipping Labels</title>
+  <style>
+    @page {
+      size: 100mm 150mm;
+      margin: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: #fff;
+      color: #000;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body {
+      width: 100%;
+    }
+
+    .shipping-label {
+      width: 100mm;
+      height: 150mm;
+      padding: 3.2mm;
+      display: flex;
+      flex-direction: column;
+      page-break-after: always;
+      break-after: page;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .shipping-label:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+
+    .shipping-label > * {
+      border-left: 0.35mm solid #000;
+      border-right: 0.35mm solid #000;
+    }
+
+    .brand {
+      height: 18mm;
+      border-top: 0.5mm solid #000;
+      border-bottom: 0.35mm solid #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      padding-top: 0.5mm;
+    }
+
+    .brand-main {
+      font-size: 7.6mm;
+      font-weight: 900;
+      letter-spacing: 0.6mm;
+    }
+
+    .brand-sub {
+      margin-top: 1.2mm;
+      font-size: 3.8mm;
+      font-weight: 700;
+      letter-spacing: 0.2mm;
+    }
+
+    .field-title {
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .from-row {
+      min-height: 10.5mm;
+      border-bottom: 0.35mm solid #000;
+      display: grid;
+      grid-template-columns: 23mm 1fr;
+      align-items: stretch;
+      font-size: 3.6mm;
+    }
+
+    .from-row > .field-title {
+      display: flex;
+      align-items: center;
+      padding-left: 3mm;
+      border-right: 0.35mm solid #000;
+    }
+
+    .from-details {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding-left: 4mm;
+      gap: 0.8mm;
+      font-size: 3.7mm;
+    }
+
+    .barcode-top {
+      min-height: 23mm;
+      border-bottom: 0.35mm solid #000;
+      padding: 3mm 14mm 1.5mm;
+      text-align: center;
+    }
+
+    .barcode-top svg {
+      width: 100%;
+      height: 15mm;
+      display: block;
+    }
+
+    .barcode-number {
+      margin-top: 1mm;
+      font-size: 4.7mm;
+      font-weight: 900;
+      letter-spacing: 0.4mm;
+    }
+
+    .waybill-row,
+    .single-row {
+      min-height: 8mm;
+      border-bottom: 0.35mm solid #000;
+      display: flex;
+      align-items: center;
+      gap: 4mm;
+      padding: 1.3mm 3mm;
+      font-size: 3.8mm;
+    }
+
+    .to-row {
+      min-height: 19mm;
+      border-bottom: 0.35mm solid #000;
+      display: grid;
+      grid-template-columns: 23mm 1fr;
+      padding: 2mm 3mm;
+      font-size: 3.6mm;
+    }
+
+    .to-details {
+      padding-left: 1mm;
+      line-height: 1.35;
+    }
+
+    .to-details strong {
+      display: block;
+      margin-bottom: 1.2mm;
+      font-size: 4mm;
+    }
+
+    .description-row {
+      min-height: 22mm;
+      max-height: 30mm;
+      border-bottom: 0.35mm solid #000;
+      display: grid;
+      grid-template-columns: 28mm 1fr;
+      align-items: start;
+      gap: 2mm;
+      padding: 2mm 3mm;
+      font-size: 3.35mm;
+      line-height: 1.28;
+      overflow: hidden;
+    }
+
+    .description-row > span:last-child {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .details-grid {
+      min-height: 25mm;
+      border-bottom: 0.35mm solid #000;
+      display: grid;
+      grid-template-columns: 60% 40%;
+    }
+
+    .left-details {
+      border-right: 0.35mm solid #000;
+    }
+
+    .detail-line {
+      height: 8.3mm;
+      border-bottom: 0.3mm solid #000;
+      display: grid;
+      grid-template-columns: 27mm 1fr;
+      align-items: center;
+      padding: 0 3mm;
+      font-size: 3.6mm;
+    }
+
+    .detail-line:last-child {
+      border-bottom: 0;
+    }
+
+    .cod-box {
+      padding: 2.5mm 3mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .cod-box .field-title {
+      font-size: 3.4mm;
+    }
+
+    .cod-value {
+      margin-top: 4mm;
+      font-size: 6.2mm;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .note-row {
+      min-height: 9mm;
+      border-bottom: 0.35mm solid #000;
+      padding: 2mm 3mm;
+      font-size: 3.5mm;
+    }
+
+    .bottom-row {
+      min-height: 16mm;
+      border-bottom: 0.35mm solid #000;
+      display: grid;
+      grid-template-columns: 44% 56%;
+    }
+
+    .date-box {
+      border-right: 0.35mm solid #000;
+      display: flex;
+      align-items: center;
+      gap: 2mm;
+      padding: 2mm 3mm;
+      font-size: 3.4mm;
+    }
+
+    .barcode-bottom {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2.5mm 5mm;
+    }
+
+    .barcode-bottom svg {
+      width: 100%;
+      height: 9mm;
+      display: block;
+    }
+
+    .inquiry {
+      height: 8mm;
+      border-bottom: 0.5mm solid #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 3.7mm;
+      font-weight: 900;
+      letter-spacing: 0.1mm;
+    }
+
+    @media screen {
+      body {
+        background: #d9dde3;
+        padding: 10px;
       }
 
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      .shipping-label {
+        margin: 0 auto 20px;
+        background: white;
+        box-shadow: 0 2px 10px rgba(0,0,0,.2);
+      }
+    }
 
-      if (printWindow) {
-        printWindow.location.href = url;
-      } else {
-        window.open(url, "_blank");
+    @media print {
+      body {
+        background: #fff;
+        padding: 0;
       }
 
-      showSuccess(`${ids.length} thermal label(s) ready ✅`);
-      window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+      .shipping-label {
+        margin: 0;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  ${details.map((order) => shippingLabelHtml(order)).join("")}
+
+  <script>
+    window.addEventListener("load", function () {
+      setTimeout(function () {
+        window.print();
+      }, 250);
+    });
+  </script>
+</body>
+</html>`;
+
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+
+      showSuccess(`${printable.length} Hamaki shipping label(s) ready ✅`);
     } catch (err: any) {
-      if (printWindow) printWindow.close();
+      printWindow.close();
       showError("Label generation failed: " + (err?.message || "Unknown error"));
     }
   }
@@ -657,7 +1178,7 @@ export default function PendingOrdersV2({
 
             <button
               className="secondary-btn"
-              onClick={() => void printWaybills(selectedWaybills)}
+              onClick={() => void printShippingLabels(selectedRows.filter((row) => row.koombiyo_waybill_id))}
               disabled={selectedWaybills.length === 0}
             >
               Print Selected ({selectedWaybills.length})
@@ -712,7 +1233,7 @@ export default function PendingOrdersV2({
                           onChange={() => toggle(row.order_id)}
                         />
                       </td>
-                      <td>{formatDateTime(row.order_date || row.created_at)}</td>
+                      <td>{formatDateTime(row.created_at)}</td>
                       <td className="font-bold">{row.order_no}</td>
                       <td>{row.customer_name || "-"}</td>
                       <td>
@@ -759,7 +1280,7 @@ export default function PendingOrdersV2({
                           ) : (
                             <button
                               className="secondary-btn h-10 w-[145px] whitespace-nowrap text-[13px]"
-                              onClick={() => void printWaybills([row.koombiyo_waybill_id!])}
+                              onClick={() => void printShippingLabels([row])}
                             >
                               Print Label
                             </button>
