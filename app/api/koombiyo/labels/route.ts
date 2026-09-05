@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     }
 
     const pdf = await koombiyoPdf("/bulk_pods", {
-      format: "THERMAL",
+      format: "A6",
       waybill_ids: ids,
     });
 
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": 'inline; filename="koombiyo-labels.pdf"',
+        "Content-Disposition": 'inline; filename="koombiyo-labels-a6.pdf"',
         "Cache-Control": "no-store",
       },
     });
