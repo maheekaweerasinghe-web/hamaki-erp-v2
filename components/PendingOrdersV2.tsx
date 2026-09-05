@@ -845,8 +845,8 @@ export default function PendingOrdersV2({
     }
 
     .brand {
-      height: 12mm;
-      flex: 0 0 12mm;
+      height: 11mm;
+      flex: 0 0 11mm;
       border-top: 0.5mm solid #000;
       border-bottom: 0.35mm solid #000;
       display: flex;
@@ -876,8 +876,8 @@ export default function PendingOrdersV2({
     }
 
     .from-row {
-      height: 9mm;
-      flex: 0 0 9mm;
+      height: 8.5mm;
+      flex: 0 0 8.5mm;
       border-bottom: 0.35mm solid #000;
       display: grid;
       grid-template-columns: 23mm 1fr;
@@ -902,8 +902,8 @@ export default function PendingOrdersV2({
     }
 
     .barcode-top {
-      height: 19mm;
-      flex: 0 0 19mm;
+      height: 18mm;
+      flex: 0 0 18mm;
       border-bottom: 0.35mm solid #000;
       padding: 2mm 14mm 1mm;
       text-align: center;
@@ -935,29 +935,45 @@ export default function PendingOrdersV2({
     }
 
     .to-row {
-      height: 16mm;
-      flex: 0 0 16mm;
+      height: 23mm;
+      flex: 0 0 23mm;
       border-bottom: 0.35mm solid #000;
       display: grid;
-      grid-template-columns: 23mm 1fr;
-      padding: 1.4mm 3mm;
-      font-size: 3.6mm;
+      grid-template-columns: 14mm 1fr;
+      align-items: start;
+      padding: 1.6mm 3mm;
+      font-size: 3.35mm;
+      overflow: hidden;
+    }
+
+    .to-row > .field-title {
+      padding-top: 0.2mm;
     }
 
     .to-details {
-      padding-left: 1mm;
-      line-height: 1.35;
+      padding-left: 0;
+      line-height: 1.22;
+      overflow: hidden;
     }
 
     .to-details strong {
       display: block;
-      margin-bottom: 1.2mm;
-      font-size: 4mm;
+      margin-bottom: 0.8mm;
+      font-size: 3.8mm;
+      line-height: 1.15;
+    }
+
+    .to-details div {
+      max-height: 15.5mm;
+      overflow: hidden;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: normal;
     }
 
     .description-row {
-      height: 20mm;
-      flex: 0 0 20mm;
+      height: 19mm;
+      flex: 0 0 19mm;
       border-bottom: 0.35mm solid #000;
       display: grid;
       grid-template-columns: 28mm 1fr;
@@ -1022,16 +1038,16 @@ export default function PendingOrdersV2({
     }
 
     .note-row {
-      height: 7mm;
-      flex: 0 0 7mm;
+      height: 6mm;
+      flex: 0 0 6mm;
       border-bottom: 0.35mm solid #000;
       padding: 2mm 3mm;
       font-size: 3.5mm;
     }
 
     .bottom-row {
-      height: 13mm;
-      flex: 0 0 13mm;
+      height: 12mm;
+      flex: 0 0 12mm;
       border-bottom: 0.35mm solid #000;
       display: grid;
       grid-template-columns: 44% 56%;
