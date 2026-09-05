@@ -6,6 +6,7 @@ import Financials from "@/components/Financials";
 import Banking from "@/components/Banking";
 import Koombiyo from "@/components/Koombiyo";
 import PendingOrdersV2 from "@/components/PendingOrdersV2";
+import KoombiyoCityPicker from "@/components/KoombiyoCityPicker";
 
 type Product = {
   id: string;
@@ -3614,60 +3615,40 @@ async function handleSignOut() {
   </div>
 
   <div>
-    <label className="soft-label">Koombiyo District</label>
-    <select
-      className="soft-input"
-      value={salesKoombiyoDistrictId}
-      disabled={salesLocationLoading}
-      onFocus={() => void loadSalesKoombiyoDistricts()}
-      onChange={(e) => {
-        const id = e.target.value;
-        const district = salesKoombiyoDistricts.find(
-          (d: any) => String(d.district_id) === id
-        );
+    <label className="soft-label">City (Koombiyo)</label>
+    <KoombiyoCityPicker
+      cityId={salesKoombiyoCityId}
+      cityName={salesKoombiyoCityName}
+      districtId={salesKoombiyoDistrictId}
+      districtName={salesKoombiyoDistrictName}
+      onChange={(location) => {
+        if (!location) {
+          setSalesKoombiyoCityId("");
+          setSalesKoombiyoCityName("");
+          setSalesKoombiyoDistrictId("");
+          setSalesKoombiyoDistrictName("");
+          setCity("");
+          return;
+        }
 
-        setSalesKoombiyoDistrictId(id);
-        setSalesKoombiyoDistrictName(String(district?.district_name || ""));
-        setSalesKoombiyoCityId("");
-        setSalesKoombiyoCityName("");
-        setCity("");
-        void loadSalesKoombiyoCities(id);
+        setSalesKoombiyoCityId(location.city_id);
+        setSalesKoombiyoCityName(location.city_name);
+        setSalesKoombiyoDistrictId(location.district_id);
+        setSalesKoombiyoDistrictName(location.district_name);
+        setCity(location.city_name);
       }}
-    >
-      <option value="">Select district</option>
-      {salesKoombiyoDistricts.map((d: any) => (
-        <option key={d.district_id} value={d.district_id}>
-          {d.district_name}
-        </option>
-      ))}
-    </select>
+    />
   </div>
 
   <div>
-    <label className="soft-label">Koombiyo City</label>
-    <select
-      className="soft-input"
-      value={salesKoombiyoCityId}
-      disabled={!salesKoombiyoDistrictId || salesLocationLoading}
-      onChange={(e) => {
-        const id = e.target.value;
-        const selectedCity = salesKoombiyoCities.find(
-          (c: any) => String(c.city_id) === id
-        );
-
-        const name = String(selectedCity?.city_name || "");
-        setSalesKoombiyoCityId(id);
-        setSalesKoombiyoCityName(name);
-        setCity(name);
-      }}
-    >
-      <option value="">Select city</option>
-      {salesKoombiyoCities.map((c: any) => (
-        <option key={c.city_id} value={c.city_id}>
-          {c.city_name}
-        </option>
-      ))}
-    </select>
+    <label className="soft-label">District (Koombiyo)</label>
+    <input
+      className="soft-input bg-[#f8fafc]"
+      value={salesKoombiyoDistrictName}
+      placeholder="Auto selected"
+      readOnly
+      tabIndex={-1}
+    />
   </div>
 
   <div>

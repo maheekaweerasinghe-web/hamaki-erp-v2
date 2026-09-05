@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import KoombiyoCityPicker from "@/components/KoombiyoCityPicker";
 
 type Product = {
   id: string;
@@ -850,58 +851,48 @@ export default function PendingOrdersV2({
 
                 <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
                   <div>
-                    <label className="soft-label">Koombiyo District</label>
-                    <select
-                      className="soft-input"
-                      value={edit.koombiyo_district_id}
+                    <label className="soft-label">City (Koombiyo)</label>
+                    <KoombiyoCityPicker
+                      cityId={edit.koombiyo_city_id}
+                      cityName={edit.koombiyo_city_name}
+                      districtId={edit.koombiyo_district_id}
+                      districtName={edit.koombiyo_district_name}
                       disabled={locationsLoading}
-                      onChange={async (e) => {
-                        const id = e.target.value;
-                        const d = districts.find((x) => String(x.district_id) === id);
+                      onChange={(location) => {
+                        if (!location) {
+                          setEdit({
+                            ...edit,
+                            koombiyo_city_id: "",
+                            koombiyo_city_name: "",
+                            koombiyo_district_id: "",
+                            koombiyo_district_name: "",
+                            koombiyo_postal_code: "",
+                          });
+                          return;
+                        }
+
                         setEdit({
                           ...edit,
-                          koombiyo_district_id: id,
-                          koombiyo_district_name: d?.district_name || "",
-                          koombiyo_city_id: "",
-                          koombiyo_city_name: "",
-                          koombiyo_postal_code: "",
+                          koombiyo_city_id: location.city_id,
+                          koombiyo_city_name: location.city_name,
+                          koombiyo_district_id: location.district_id,
+                          koombiyo_district_name: location.district_name,
+                          koombiyo_postal_code: String(location.postal_code || ""),
+                          city_snapshot: location.city_name,
                         });
-                        await loadCities(id);
                       }}
-                    >
-                      <option value="">Select district</option>
-                      {districts.map((d) => (
-                        <option key={d.district_id} value={d.district_id}>
-                          {d.district_name}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </div>
 
                   <div>
-                    <label className="soft-label">Koombiyo City</label>
-                    <select
-                      className="soft-input"
-                      value={edit.koombiyo_city_id}
-                      disabled={!edit.koombiyo_district_id || locationsLoading}
-                      onChange={(e) => {
-                        const id = e.target.value;
-                        const c = cities.find((x) => String(x.city_id) === id);
-                        setEdit({
-                          ...edit,
-                          koombiyo_city_id: id,
-                          koombiyo_city_name: c?.city_name || "",
-                          koombiyo_postal_code: String(c?.postal_code || ""),
-                        });
-                      }}
-                    >
-                      <option value="">Select city</option>
-                      {cities.map((c) => (
-                        <option key={c.city_id} value={c.city_id}>
-                          {c.city_name}
-                        </option>
-                      ))}
-                    </select>
+                    <label className="soft-label">District (Koombiyo)</label>
+                    <input
+                      className="soft-input bg-[#f8fafc]"
+                      value={edit.koombiyo_district_name}
+                      placeholder="Auto selected"
+                      readOnly
+                      tabIndex={-1}
+                    />
                   </div>
 
                   <div>
