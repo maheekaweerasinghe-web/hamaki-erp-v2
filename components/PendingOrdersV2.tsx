@@ -841,10 +841,12 @@ export default function PendingOrdersV2({
     .shipping-label > * {
       border-left: 0.35mm solid #000;
       border-right: 0.35mm solid #000;
+      flex-shrink: 0;
     }
 
     .brand {
-      height: 18mm;
+      height: 12mm;
+      flex: 0 0 12mm;
       border-top: 0.5mm solid #000;
       border-bottom: 0.35mm solid #000;
       display: flex;
@@ -856,14 +858,14 @@ export default function PendingOrdersV2({
     }
 
     .brand-main {
-      font-size: 7.6mm;
+      font-size: 6.1mm;
       font-weight: 900;
       letter-spacing: 0.6mm;
     }
 
     .brand-sub {
-      margin-top: 1.2mm;
-      font-size: 3.8mm;
+      margin-top: 0.6mm;
+      font-size: 3.1mm;
       font-weight: 700;
       letter-spacing: 0.2mm;
     }
@@ -874,7 +876,8 @@ export default function PendingOrdersV2({
     }
 
     .from-row {
-      min-height: 10.5mm;
+      height: 9mm;
+      flex: 0 0 9mm;
       border-bottom: 0.35mm solid #000;
       display: grid;
       grid-template-columns: 23mm 1fr;
@@ -895,32 +898,34 @@ export default function PendingOrdersV2({
       justify-content: center;
       padding-left: 4mm;
       gap: 0.8mm;
-      font-size: 3.7mm;
+      font-size: 3.2mm;
     }
 
     .barcode-top {
-      min-height: 23mm;
+      height: 19mm;
+      flex: 0 0 19mm;
       border-bottom: 0.35mm solid #000;
-      padding: 3mm 14mm 1.5mm;
+      padding: 2mm 14mm 1mm;
       text-align: center;
     }
 
     .barcode-top svg {
       width: 100%;
-      height: 15mm;
+      height: 11mm;
       display: block;
     }
 
     .barcode-number {
-      margin-top: 1mm;
-      font-size: 4.7mm;
+      margin-top: 0.7mm;
+      font-size: 3.9mm;
       font-weight: 900;
       letter-spacing: 0.4mm;
     }
 
     .waybill-row,
     .single-row {
-      min-height: 8mm;
+      height: 7mm;
+      flex: 0 0 7mm;
       border-bottom: 0.35mm solid #000;
       display: flex;
       align-items: center;
@@ -930,11 +935,12 @@ export default function PendingOrdersV2({
     }
 
     .to-row {
-      min-height: 19mm;
+      height: 16mm;
+      flex: 0 0 16mm;
       border-bottom: 0.35mm solid #000;
       display: grid;
       grid-template-columns: 23mm 1fr;
-      padding: 2mm 3mm;
+      padding: 1.4mm 3mm;
       font-size: 3.6mm;
     }
 
@@ -950,15 +956,15 @@ export default function PendingOrdersV2({
     }
 
     .description-row {
-      min-height: 22mm;
-      max-height: 30mm;
+      height: 20mm;
+      flex: 0 0 20mm;
       border-bottom: 0.35mm solid #000;
       display: grid;
       grid-template-columns: 28mm 1fr;
       align-items: start;
       gap: 2mm;
       padding: 2mm 3mm;
-      font-size: 3.35mm;
+      font-size: 3.15mm;
       line-height: 1.28;
       overflow: hidden;
     }
@@ -967,10 +973,13 @@ export default function PendingOrdersV2({
       white-space: normal;
       overflow-wrap: anywhere;
       word-break: break-word;
+      max-height: 16mm;
+      overflow: hidden;
     }
 
     .details-grid {
-      min-height: 25mm;
+      height: 22mm;
+      flex: 0 0 22mm;
       border-bottom: 0.35mm solid #000;
       display: grid;
       grid-template-columns: 60% 40%;
@@ -981,7 +990,7 @@ export default function PendingOrdersV2({
     }
 
     .detail-line {
-      height: 8.3mm;
+      height: 7.33mm;
       border-bottom: 0.3mm solid #000;
       display: grid;
       grid-template-columns: 27mm 1fr;
@@ -1006,21 +1015,23 @@ export default function PendingOrdersV2({
     }
 
     .cod-value {
-      margin-top: 4mm;
-      font-size: 6.2mm;
+      margin-top: 2.5mm;
+      font-size: 5.5mm;
       font-weight: 900;
       white-space: nowrap;
     }
 
     .note-row {
-      min-height: 9mm;
+      height: 7mm;
+      flex: 0 0 7mm;
       border-bottom: 0.35mm solid #000;
       padding: 2mm 3mm;
       font-size: 3.5mm;
     }
 
     .bottom-row {
-      min-height: 16mm;
+      height: 13mm;
+      flex: 0 0 13mm;
       border-bottom: 0.35mm solid #000;
       display: grid;
       grid-template-columns: 44% 56%;
@@ -1044,12 +1055,13 @@ export default function PendingOrdersV2({
 
     .barcode-bottom svg {
       width: 100%;
-      height: 9mm;
+      height: 7.5mm;
       display: block;
     }
 
     .inquiry {
-      height: 8mm;
+      height: 6mm;
+      flex: 0 0 6mm;
       border-bottom: 0.5mm solid #000;
       display: flex;
       align-items: center;
