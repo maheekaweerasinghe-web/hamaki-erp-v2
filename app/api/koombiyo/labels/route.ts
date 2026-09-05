@@ -17,8 +17,12 @@ export async function POST(request: Request) {
       );
     }
 
+    // Use Koombiyo's full POD shipping-label layout.
+    // This is the layout that includes structured fields such as
+    // FROM, TO, PHONE, DESCRIPTION, ORDER NO, COD AMOUNT, WEIGHT,
+    // NOTE, DATE and barcode sections.
     const pdf = await koombiyoPdf("/bulk_pods", {
-      format: "A6",
+      format: "POD",
       waybill_ids: ids,
     });
 
@@ -26,7 +30,7 @@ export async function POST(request: Request) {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": 'inline; filename="koombiyo-labels-a6.pdf"',
+        "Content-Disposition": 'inline; filename="koombiyo-shipping-labels.pdf"',
         "Cache-Control": "no-store",
       },
     });
