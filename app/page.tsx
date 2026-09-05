@@ -2234,6 +2234,47 @@ async function handleSignOut() {
 <div className="mt-4 text-[16px] font-bold text-[var(--success)]">
   {loadingUser ? "Loading user..." : (message || "Ready ✅")}
 </div>
+
+<button
+  className="secondary-btn mt-3"
+  onClick={async () => {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        showError("No active session");
+        return;
+      }
+
+      const res = await fetch("/api/koombiyo/test", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        showError(result?.message || "Koombiyo test failed");
+        return;
+      }
+
+      showSuccess(
+        `Koombiyo connected ✅ Districts: ${result.district_count}`
+      );
+    } catch (err: any) {
+      showError(
+        "Koombiyo test failed: " +
+          (err?.message || "Unknown error")
+      );
+    }
+  }}
+>
+  Test Koombiyo Connection
+</button>
  
 
 {(currentUser?.role === "ADMIN" || currentUser?.role === "ACCOUNTANT") && activeTab === "rm" && (
