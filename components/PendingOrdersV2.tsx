@@ -189,8 +189,8 @@ function shippingLabelHtml(order: any) {
   const description =
     items.length > 0
       ? items
-          .map((item: any) =>
-            [
+          .map((item: any) => {
+            const base = [
               item.product_type_snapshot,
               item.material_snapshot,
               item.color_snapshot,
@@ -198,8 +198,12 @@ function shippingLabelHtml(order: any) {
               `x${Number(item.qty || 0).toString()}`,
             ]
               .filter(Boolean)
-              .join(" ")
-          )
+              .join(" ");
+
+            const addon = String(item.extra_addon || "").trim();
+
+            return addon ? `${base} + ${addon}` : base;
+          })
           .join(", ")
       : String(order.product_summary || "");
 
