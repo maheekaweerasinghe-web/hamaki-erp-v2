@@ -132,23 +132,42 @@ export async function POST(request: Request) {
       archiving them, but this filter protects us from any other stale/local
       linkage as well.
     */
-    const { data: reservedRows, error: reservedError } = await supabase
-      .from("orders")
-      .select("koombiyo_waybill_id")
-      .in("koombiyo_waybill_id", activeWaybills);
+    /*
+      Supabase .in(...) is sent as a URL query parameter.
+      Koombiyo can return a very large active-waybill list, so sending all IDs
+      in one .in(...) request can exceed Cloudflare's URL limit and return 414.
+      Query Hamaki in small batches instead.
+    */
+    const reserved = new Set<string>();
+    const WAYBILL_CHECK_BATCH_SIZE = 40;
 
-    if (reservedError) {
-      throw new Error(
-        "Could not verify available Koombiyo waybills against Hamaki: " +
-          reservedError.message
+    for (
+      let i = 0;
+      i < activeWaybills.length;
+      i += WAYBILL_CHECK_BATCH_SIZE
+    ) {
+      const batch = activeWaybills.slice(
+        i,
+        i + WAYBILL_CHECK_BATCH_SIZE
       );
-    }
 
-    const reserved = new Set(
-      (reservedRows || [])
-        .map((row: any) => String(row?.koombiyo_waybill_id || "").trim())
-        .filter(Boolean)
-    );
+      const { data: reservedRows, error: reservedError } = await supabase
+        .from("orders")
+        .select("koombiyo_waybill_id")
+        .in("koombiyo_waybill_id", batch);
+
+      if (reservedError) {
+        throw new Error(
+          "Could not verify available Koombiyo waybills against Hamaki: " +
+            reservedError.message
+        );
+      }
+
+      for (const row of reservedRows || []) {
+        const id = String(row?.koombiyo_waybill_id || "").trim();
+        if (id) reserved.add(id);
+      }
+    }
 
     const candidateWaybills = activeWaybills.filter(
       (waybillId: string) => !reserved.has(waybillId)
