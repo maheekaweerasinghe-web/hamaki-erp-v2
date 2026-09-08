@@ -326,6 +326,7 @@ export default function PendingOrdersV2({
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [actingId, setActingId] = useState("");
+  const [actingType, setActingType] = useState<"create" | "cancel" | "edit" | "print" | "">("");
   const [bulkActing, setBulkActing] = useState(false);
 
   const [edit, setEdit] = useState<EditState | null>(null);
@@ -667,6 +668,7 @@ export default function PendingOrdersV2({
 
     try {
       setActingId(row.order_id);
+      setActingType("create");
       showInfo(`Creating Koombiyo shipment for ${row.order_no}...`);
 
       const token = await getSessionToken();
@@ -691,6 +693,7 @@ export default function PendingOrdersV2({
       showError("Koombiyo creation failed: " + (err?.message || "Unknown error"));
     } finally {
       setActingId("");
+      setActingType("");
     }
   }
 
@@ -1152,6 +1155,7 @@ export default function PendingOrdersV2({
 
     try {
       setActingId(row.order_id);
+      setActingType("cancel");
 
       if (hasKoombiyo) {
         const {
@@ -1200,6 +1204,7 @@ export default function PendingOrdersV2({
       showError("Cancel failed: " + (err?.message || "Unknown error"));
     } finally {
       setActingId("");
+      setActingType("");
     }
   }
 
@@ -1345,7 +1350,9 @@ export default function PendingOrdersV2({
                               disabled={actingId === row.order_id || bulkActing}
                               onClick={() => void createShipment(row)}
                             >
-                              {actingId === row.order_id ? "Creating..." : "Create Koombiyo"}
+                              {actingId === row.order_id && actingType === "create"
+                                ? "Creating..."
+                                : "Create Koombiyo"}
                             </button>
                           ) : (
                             <button
@@ -1368,7 +1375,7 @@ export default function PendingOrdersV2({
                                 : "Cancel order"
                             }
                           >
-                            {actingId === row.order_id
+                            {actingId === row.order_id && actingType === "cancel"
                               ? "Cancelling..."
                               : locked
                                 ? "Cancel Shipment"
