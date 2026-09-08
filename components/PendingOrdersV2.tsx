@@ -349,9 +349,9 @@ export default function PendingOrdersV2({
     return session.access_token;
   }
 
-  async function loadPending(search = "") {
+  async function loadPending(search = "", silent = false) {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
 
       const { data, error } = await supabase.rpc("get_pending_orders_koombiyo", {
         p_query: search.trim() || null,
@@ -366,7 +366,7 @@ export default function PendingOrdersV2({
       setRows((data || []) as PendingRow[]);
       setSelectedIds([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
@@ -645,7 +645,7 @@ export default function PendingOrdersV2({
 
       showSuccess(`Order ${edit.order_no} updated ✅`);
       setEdit(null);
-      await loadPending(query);
+      await loadPending(query, true);
     } catch (err: any) {
       showError("Order update failed: " + (err?.message || "Unknown error"));
     } finally {
@@ -686,7 +686,7 @@ export default function PendingOrdersV2({
       }
 
       showSuccess(`Koombiyo created ✅ ${result.waybill_id}`);
-      await loadPending(query);
+      await loadPending(query, true);
     } catch (err: any) {
       showError("Koombiyo creation failed: " + (err?.message || "Unknown error"));
     } finally {
@@ -744,7 +744,7 @@ export default function PendingOrdersV2({
         showSuccess(`Koombiyo created for ${success} order(s) ✅`);
       }
 
-      await loadPending(query);
+      await loadPending(query, true);
     } finally {
       setBulkActing(false);
     }
@@ -1195,7 +1195,7 @@ export default function PendingOrdersV2({
         showSuccess(`Order ${row.order_no} cancelled ✅ Stock returned`);
       }
 
-      await loadPending(query);
+      await loadPending(query, true);
     } catch (err: any) {
       showError("Cancel failed: " + (err?.message || "Unknown error"));
     } finally {
@@ -1230,11 +1230,12 @@ export default function PendingOrdersV2({
               />
             </div>
 
-            <button className="secondary-btn" onClick={() => void loadPending(query)}>
+            <button type="button" className="secondary-btn" onClick={() => void loadPending(query)}>
               Refresh
             </button>
 
             <button
+              type="button"
               className="primary-btn"
               onClick={() => void createSelectedShipments()}
               disabled={bulkActing || selectedIds.length === 0}
@@ -1243,6 +1244,7 @@ export default function PendingOrdersV2({
             </button>
 
             <button
+              type="button"
               className="secondary-btn"
               onClick={() => void printShippingLabels(selectedRows.filter((row) => row.koombiyo_waybill_id))}
               disabled={selectedWaybills.length === 0}
@@ -1327,6 +1329,7 @@ export default function PendingOrdersV2({
                       <td>
                         <div className="flex flex-col gap-2">
                           <button
+                            type="button"
                             className="secondary-btn h-10 w-[145px] whitespace-nowrap text-[13px]"
                             disabled={locked || actingId === row.order_id}
                             onClick={() => void openEdit(row.order_id)}
@@ -1337,6 +1340,7 @@ export default function PendingOrdersV2({
 
                           {!locked ? (
                             <button
+                              type="button"
                               className="primary-btn h-10 w-[145px] whitespace-nowrap text-[13px]"
                               disabled={actingId === row.order_id || bulkActing}
                               onClick={() => void createShipment(row)}
@@ -1345,6 +1349,7 @@ export default function PendingOrdersV2({
                             </button>
                           ) : (
                             <button
+                              type="button"
                               className="secondary-btn h-10 w-[145px] whitespace-nowrap text-[13px]"
                               onClick={() => void printShippingLabels([row])}
                             >
@@ -1353,6 +1358,7 @@ export default function PendingOrdersV2({
                           )}
 
                           <button
+                            type="button"
                             className="h-10 w-[145px] whitespace-nowrap rounded-[10px] bg-[#fee2e2] px-3 text-[13px] font-bold text-[#b91c1c]"
                             disabled={actingId === row.order_id || bulkActing}
                             onClick={() => void cancelOrder(row)}
