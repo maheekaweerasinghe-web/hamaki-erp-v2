@@ -133,41 +133,36 @@ export async function POST(request: Request) {
       linkage as well.
     */
     /*
-      Supabase .in(...) is sent as a URL query parameter.
-      Koombiyo can return a very large active-waybill list, so sending all IDs
-      in one .in(...) request can exceed Cloudflare's URL limit and return 414.
-      Query Hamaki in small batches instead.
+      IMPORTANT:
+      Do NOT use `.in("koombiyo_waybill_id", activeWaybills)` here.
+      Supabase encodes .in() in the URL, which caused the 414 error.
+
+      Also do NOT check dozens of small .in() batches sequentially; if Koombiyo
+      has hundreds/thousands of active waybills that makes shipment creation
+      appear to hang.
+
+      This RPC sends the entire waybill array in a POST JSON body and lets
+      PostgreSQL compare it locally in one query.
     */
-    const reserved = new Set<string>();
-    const WAYBILL_CHECK_BATCH_SIZE = 40;
+    const { data: reservedRows, error: reservedError } = await supabase.rpc(
+      "get_reserved_koombiyo_waybills",
+      {
+        p_waybill_ids: activeWaybills,
+      }
+    );
 
-    for (
-      let i = 0;
-      i < activeWaybills.length;
-      i += WAYBILL_CHECK_BATCH_SIZE
-    ) {
-      const batch = activeWaybills.slice(
-        i,
-        i + WAYBILL_CHECK_BATCH_SIZE
+    if (reservedError) {
+      throw new Error(
+        "Could not verify available Koombiyo waybills against Hamaki: " +
+          reservedError.message
       );
-
-      const { data: reservedRows, error: reservedError } = await supabase
-        .from("orders")
-        .select("koombiyo_waybill_id")
-        .in("koombiyo_waybill_id", batch);
-
-      if (reservedError) {
-        throw new Error(
-          "Could not verify available Koombiyo waybills against Hamaki: " +
-            reservedError.message
-        );
-      }
-
-      for (const row of reservedRows || []) {
-        const id = String(row?.koombiyo_waybill_id || "").trim();
-        if (id) reserved.add(id);
-      }
     }
+
+    const reserved = new Set(
+      (reservedRows || [])
+        .map((row: any) => String(row?.waybill_id || "").trim())
+        .filter(Boolean)
+    );
 
     const candidateWaybills = activeWaybills.filter(
       (waybillId: string) => !reserved.has(waybillId)
