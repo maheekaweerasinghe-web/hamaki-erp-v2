@@ -71,6 +71,15 @@ type Settings = {
   opening_cod_note: string | null;
 };
 
+type TransactionFilters = {
+  fromDate: string;
+  toDate: string;
+  account: string;
+  business: string;
+  category: string;
+  direction: string;
+};
+
 const categories = [
   ["COD_SETTLEMENT", "COD settlement"],
   ["HAMAKI_BANK_TRANSFER_RECEIPT", "Hamaki bank-transfer receipts"],
@@ -113,6 +122,17 @@ export default function Banking({ formatRs: _formatRs, showSuccess, showError }:
   const [filterBusiness, setFilterBusiness] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
   const [filterDirection, setFilterDirection] = useState("");
+  const [appliedTransactionFilters, setAppliedTransactionFilters] = useState<TransactionFilters>({
+    fromDate: `${todayLK().slice(0, 8)}01`,
+    toDate: todayLK(),
+    account: "",
+    business: "",
+    category: "",
+    direction: "",
+  });
+  const [transactionPage, setTransactionPage] = useState(0);
+  const [transactionHasNext, setTransactionHasNext] = useState(false);
+  const transactionPageSize = 25;
 
   const [txnDate, setTxnDate] = useState(todayLK());
   const [txnAccount, setTxnAccount] = useState("");
@@ -162,52 +182,106 @@ export default function Banking({ formatRs: _formatRs, showSuccess, showError }:
   const loadCore = useCallback(async () => {
     setLoading(true);
     try {
-      const [d, s, a, v, p] = await Promise.all([
+      const [d, s, a] = await Promise.all([
         supabase.rpc("get_banking_dashboard"),
         supabase.from("banking_settings").select("*").eq("id", 1).single(),
         supabase.from("v_bank_account_position").select("*").order("is_active", { ascending: false }).order("account_name"),
-        supabase.from("rm_vendors").select("id,vendor_code,vendor_name,status").order("vendor_name"),
-        supabase.from("v_supplier_payables").select("*").order("outstanding", { ascending: false }),
       ]);
       if (d.error) throw d.error;
       if (s.error) throw s.error;
       if (a.error) throw a.error;
-      if (v.error) throw v.error;
-      if (p.error) throw p.error;
+
       setDashboard((d.data || {}) as Dashboard);
       setSettings(s.data as Settings);
       setAccounts((a.data || []) as BankAccount[]);
-      setVendors((v.data || []) as Vendor[]);
-      setSupplierRows((p.data || []) as SupplierPayable[]);
+
       if (s.data) {
         setSetupStart(s.data.system_start_date || "2026-09-01");
         setSetupCodOpening(String(Math.round(n(s.data.opening_cod_receivable)) || ""));
         setSetupCodNote(s.data.opening_cod_note || "");
       }
-    } catch (e: any) { showError(e?.message || "Banking load failed"); }
-    finally { setLoading(false); }
+    } catch (e: any) {
+      showError(e?.message || "Banking load failed");
+    } finally {
+      setLoading(false);
+    }
+  }, [showError]);
+
+  const loadVendors = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("rm_vendors")
+      .select("id,vendor_code,vendor_name,status")
+      .order("vendor_name");
+
+    if (error) return showError(error.message);
+    setVendors((data || []) as Vendor[]);
+  }, [showError]);
+
+  const loadSupplierData = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("v_supplier_payables")
+      .select("*")
+      .order("outstanding", { ascending: false });
+
+    if (error) return showError(error.message);
+    setSupplierRows((data || []) as SupplierPayable[]);
   }, [showError]);
 
   const loadTransactions = useCallback(async () => {
-    let q = supabase.from("bank_transactions")
+    const start = transactionPage * transactionPageSize;
+    const end = start + transactionPageSize;
+
+    let q = supabase
+      .from("bank_transactions")
       .select("id,txn_date,account_id,direction,amount,business,category,vendor_id,cod_cleared_amount,reference,notes,transfer_group_id,source,created_at")
       .is("voided_at", null)
-      .gte("txn_date", fromDate)
-      .lte("txn_date", toDate)
+      .gte("txn_date", appliedTransactionFilters.fromDate)
+      .lte("txn_date", appliedTransactionFilters.toDate)
       .order("txn_date", { ascending: false })
       .order("created_at", { ascending: false })
-      .limit(1000);
-    if (filterAccount) q = q.eq("account_id", filterAccount);
-    if (filterBusiness) q = q.eq("business", filterBusiness);
-    if (filterCategory) q = q.eq("category", filterCategory);
-    if (filterDirection) q = q.eq("direction", filterDirection);
+      .range(start, end);
+
+    if (appliedTransactionFilters.account) q = q.eq("account_id", appliedTransactionFilters.account);
+    if (appliedTransactionFilters.business) q = q.eq("business", appliedTransactionFilters.business);
+    if (appliedTransactionFilters.category) q = q.eq("category", appliedTransactionFilters.category);
+    if (appliedTransactionFilters.direction) q = q.eq("direction", appliedTransactionFilters.direction);
+
     const { data, error } = await q;
     if (error) return showError(error.message);
-    setTransactions((data || []) as Txn[]);
-  }, [fromDate, toDate, filterAccount, filterBusiness, filterCategory, filterDirection, showError]);
+
+    const rows = (data || []) as Txn[];
+    setTransactionHasNext(rows.length > transactionPageSize);
+    setTransactions(rows.slice(0, transactionPageSize));
+  }, [appliedTransactionFilters, transactionPage, showError]);
+
+  function applyTransactionFilters() {
+    setAppliedTransactionFilters({
+      fromDate,
+      toDate,
+      account: filterAccount,
+      business: filterBusiness,
+      category: filterCategory,
+      direction: filterDirection,
+    });
+    setTransactionPage(0);
+  }
 
   useEffect(() => { void loadCore(); }, [loadCore]);
-  useEffect(() => { if (view === "transactions") void loadTransactions(); }, [view, loadTransactions]);
+
+  useEffect(() => {
+    if (view !== "transactions") return;
+    void loadVendors();
+  }, [view, loadVendors]);
+
+  useEffect(() => {
+    if (view !== "suppliers") return;
+    void Promise.all([loadVendors(), loadSupplierData()]);
+  }, [view, loadVendors, loadSupplierData]);
+
+  useEffect(() => {
+    if (view !== "transactions") return;
+    void loadTransactions();
+  }, [view, loadTransactions]);
 
   function resetTxn() {
     setEditingTxn(null); setTxnDate(todayLK()); setTxnAccount(""); setTxnDirection("IN"); setTxnBusiness("HAMAKI");
@@ -247,7 +321,7 @@ export default function Banking({ formatRs: _formatRs, showSuccess, showError }:
         if (error) throw error;
         showSuccess("Bank transaction recorded ✅");
       }
-      resetTxn(); await Promise.all([loadCore(), loadTransactions()]);
+      resetTxn(); await Promise.all([loadCore(), loadTransactions(), loadSupplierData()]);
     } catch (e: any) { showError(e?.message || "Could not save transaction"); }
     finally { setSavingTxn(false); }
   }
@@ -258,7 +332,7 @@ export default function Banking({ formatRs: _formatRs, showSuccess, showError }:
     const { error } = await supabase.rpc("void_bank_transaction", { p_id: row.id, p_reason: reason.trim() });
     if (error) return showError(error.message);
     showSuccess(row.category === "TRANSFER" ? "Transfer voided on both accounts ✅" : "Transaction voided ✅");
-    await Promise.all([loadCore(), loadTransactions()]);
+    await Promise.all([loadCore(), loadTransactions(), loadSupplierData()]);
   }
 
   async function saveTransfer() {
@@ -319,7 +393,7 @@ export default function Banking({ formatRs: _formatRs, showSuccess, showError }:
       vendor_id: openingVendor, opening_date: settings.system_start_date, opening_amount: n(openingVendorAmount),
     }, { onConflict: "vendor_id,opening_date" });
     if (error) return showError(error.message);
-    setOpeningVendorAmount(""); showSuccess("Opening supplier payable saved ✅"); await loadCore();
+    setOpeningVendorAmount(""); showSuccess("Opening supplier payable saved ✅"); await Promise.all([loadCore(), loadSupplierData()]);
   }
 
   const accountName = (id: string) => accounts.find(a => a.id === id)?.account_name || "Unknown account";
@@ -401,9 +475,30 @@ export default function Banking({ formatRs: _formatRs, showSuccess, showError }:
         </section>
 
         <section className="mt-5 rounded-[18px] border border-[#d7dee8] bg-white p-5 shadow-sm">
-          <div className="flex flex-wrap items-end justify-between gap-3"><div><h3 className="text-[18px] font-bold">Transaction history</h3><p className="mt-1 text-[12px] text-[var(--muted)]">Filter any date range and trace every recorded movement.</p></div><button className="secondary-btn" onClick={()=>void loadTransactions()}>Apply Filters</button></div>
+          <div className="flex flex-wrap items-end justify-between gap-3"><div><h3 className="text-[18px] font-bold">Transaction history</h3><p className="mt-1 text-[12px] text-[var(--muted)]">Shows 25 transactions per page. Apply filters to trace older movements without loading the full history at once.</p></div><button className="secondary-btn" onClick={applyTransactionFilters}>Apply Filters</button></div>
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6"><input className="soft-input" type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)}/><input className="soft-input" type="date" value={toDate} onChange={e=>setToDate(e.target.value)}/><select className="soft-input" value={filterAccount} onChange={e=>setFilterAccount(e.target.value)}><option value="">All accounts</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.account_name}</option>)}</select><select className="soft-input" value={filterBusiness} onChange={e=>setFilterBusiness(e.target.value)}><option value="">All businesses</option><option>HAMAKI</option><option>TEESUPP</option><option>PERSONAL</option><option>OTHER</option></select><select className="soft-input" value={filterDirection} onChange={e=>setFilterDirection(e.target.value)}><option value="">In + Out</option><option value="IN">Money In</option><option value="OUT">Money Out</option></select><select className="soft-input" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}><option value="">All categories</option><option value="TRANSFER">Own-account transfer</option>{categories.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></div>
           <div className="mt-4 overflow-x-auto"><table className="erp-table min-w-[1200px]"><thead><tr><th>Date</th><th>Account</th><th>Business</th><th>Category</th><th>Reference</th><th>Supplier</th><th className="num">In</th><th className="num">Out</th><th className="num">COD cleared</th><th className="center">Action</th></tr></thead><tbody>{transactions.map(r=><tr key={r.id}><td>{r.txn_date}</td><td className="font-semibold">{accountName(r.account_id)}</td><td>{r.business}</td><td>{r.category==='TRANSFER'?'Own-account transfer':(categoryLabel.get(r.category)||r.category)}</td><td>{r.reference||'—'}</td><td>{vendorName(r.vendor_id)||'—'}</td><td className="num font-semibold text-green-700">{r.direction==='IN'?wholeRs(r.amount):'—'}</td><td className="num font-semibold text-red-600">{r.direction==='OUT'?wholeRs(r.amount):'—'}</td><td className="num">{r.category==='COD_SETTLEMENT'?wholeRs(r.cod_cleared_amount ?? r.amount):'—'}</td><td className="center"><div className="flex justify-center gap-3">{r.category!=='TRANSFER'&&<button className="text-[12px] font-bold text-blue-700 hover:underline" onClick={()=>startEdit(r)}>Edit</button>}<button className="text-[12px] font-bold text-red-600 hover:underline" onClick={()=>void voidTransaction(r)}>Void</button></div></td></tr>)}</tbody></table>{!transactions.length&&<div className="p-5 text-center text-[13px] text-[var(--muted)]">No transactions in this filter.</div>}</div>
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <div className="text-[12px] text-[var(--muted)]">
+              Page {transactionPage + 1} • up to {transactionPageSize} transactions
+            </div>
+            <div className="flex gap-2">
+              <button
+                className="secondary-btn"
+                disabled={transactionPage === 0}
+                onClick={() => setTransactionPage((p) => Math.max(0, p - 1))}
+              >
+                Previous
+              </button>
+              <button
+                className="secondary-btn"
+                disabled={!transactionHasNext}
+                onClick={() => setTransactionPage((p) => p + 1)}
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </section>
       </>}
 
