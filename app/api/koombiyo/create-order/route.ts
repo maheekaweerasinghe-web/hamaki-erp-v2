@@ -57,9 +57,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const phone = String(
-      order.phone_primary || order.phone_secondary || ""
-    ).trim();
+    const phones = [
+      String(order.phone_primary || "").trim(),
+      String(order.phone_secondary || "").trim(),
+    ].filter(Boolean);
+
+    const phone = Array.from(new Set(phones)).join(" / ");
 
     if (!phone) {
       return Response.json(
