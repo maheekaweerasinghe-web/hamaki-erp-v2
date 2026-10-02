@@ -1401,7 +1401,7 @@ export default function PendingOrdersV2({
 
                               <button
                                 type="button"
-                                className="secondary-btn h-10 w-[145px] whitespace-nowrap text-[13px]"
+                                className="h-10 w-[145px] whitespace-nowrap rounded-[10px] bg-[#dcfce7] px-3 text-[13px] font-bold text-[#166534] transition hover:bg-[#bbf7d0] disabled:cursor-not-allowed disabled:opacity-50"
                                 disabled={actingId === row.order_id || bulkActing}
                                 onClick={() => void quickDispatch(row)}
                                 title="For parcels sent by a non-Koombiyo delivery method"
