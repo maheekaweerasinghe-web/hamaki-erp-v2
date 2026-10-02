@@ -246,6 +246,7 @@ const [authSubmitting, setAuthSubmitting] = useState(false);
 
   const [pendingDupMsg, setPendingDupMsg] = useState("");
   const [recentDispatchDupMsg, setRecentDispatchDupMsg] = useState("");
+  const lastDuplicateCheckRef = useRef("");
 
   const [qty, setQty] = useState("1");
   const [price, setPrice] = useState("");
@@ -512,17 +513,40 @@ useEffect(() => {
 }, []);
 
   useEffect(() => {
-  const hasAnyPhone = String(phone1 || "").trim() || String(phone2 || "").trim();
+  const p1 = String(phone1 || "").trim();
+  const p2 = String(phone2 || "").trim();
 
-  if (!hasAnyPhone) {
+  if (!p1 && !p2) {
+    lastDuplicateCheckRef.current = "";
+    setPendingDupMsg("");
+    setRecentDispatchDupMsg("");
+    lastDuplicateCheckRef.current = "";
+    return;
+  }
+
+  const digits1 = p1.replace(/\D/g, "");
+  const digits2 = p2.replace(/\D/g, "");
+
+  // Avoid querying while a salesperson is still typing the first few digits.
+  // Once a reasonably complete number exists, duplicate checking works exactly
+  // as before against pending + recent dispatched orders.
+  const hasCheckablePhone =
+    (digits1.length >= 7) ||
+    (digits2.length >= 7);
+
+  if (!hasCheckablePhone) {
     setPendingDupMsg("");
     setRecentDispatchDupMsg("");
     return;
   }
 
+  const signature = `${p1}|${p2}`;
+  if (lastDuplicateCheckRef.current === signature) return;
+
   const t = setTimeout(() => {
-    void checkDuplicateWarnings(phone1, phone2);
-  }, 300);
+    lastDuplicateCheckRef.current = signature;
+    void checkDuplicateWarnings(p1, p2);
+  }, 500);
 
   return () => clearTimeout(t);
 }, [phone1, phone2]);
