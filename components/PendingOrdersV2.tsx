@@ -740,6 +740,54 @@ export default function PendingOrdersV2({
     }
   }
 
+  async function quickDispatchSelected() {
+    const selected = rows.filter((row) => selectedIds.includes(row.order_id));
+
+    if (!selected.length) {
+      showError("No orders selected");
+      return;
+    }
+
+    const koombiyoRows = selected.filter((row) => row.koombiyo_waybill_id);
+
+    if (koombiyoRows.length) {
+      showError(
+        `${koombiyoRows.length} selected order(s) already have Koombiyo waybills. Remove them from the selection and dispatch those by barcode scan.`
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Quick dispatch ${selected.length} selected order(s) as NON-KOOMBIYO orders?\n\nUse this only when all selected parcels are being sent by another delivery method and are physically ready to leave.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setBulkActing(true);
+      showInfo(`Dispatching ${selected.length} selected order(s)...`);
+
+      const { data, error } = await supabase.rpc("bulk_update_order_status", {
+        p_order_ids: selected.map((row) => row.order_id),
+        p_new_status: "DISPATCHED",
+        p_action_by_user_id: currentUser.id,
+      });
+
+      if (error) throw new Error(error.message);
+
+      const updatedCount = Array.isArray(data)
+        ? Number(data[0]?.updated_count || 0)
+        : Number((data as any)?.updated_count || 0);
+
+      showSuccess(`Quick dispatched ${updatedCount} order(s) ✅`);
+      await loadPending(query, true);
+    } catch (err: any) {
+      showError("Bulk quick dispatch failed: " + (err?.message || "Unknown error"));
+    } finally {
+      setBulkActing(false);
+    }
+  }
+
   async function createSelectedShipments() {
     const selected = rows.filter((r) => selectedIds.includes(r.order_id));
     if (!selected.length) {
@@ -1298,6 +1346,16 @@ export default function PendingOrdersV2({
               disabled={selectedWaybills.length === 0}
             >
               Print Selected ({selectedWaybills.length})
+            </button>
+
+            <button
+              type="button"
+              className="rounded-[10px] bg-[#dcfce7] px-4 py-2 font-bold text-[#166534] transition hover:bg-[#bbf7d0] disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => void quickDispatchSelected()}
+              disabled={bulkActing || selectedIds.length === 0}
+              title="Quick dispatch selected non-Koombiyo orders"
+            >
+              {bulkActing ? "Dispatching..." : `Quick Dispatch (${selectedIds.length})`}
             </button>
           </div>
         </div>
