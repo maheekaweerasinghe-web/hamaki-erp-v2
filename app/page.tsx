@@ -2881,7 +2881,6 @@ async function handleSignOut() {
             </div>
           )}
         </div>
-        </div>
       </>
     )}
   </div>
