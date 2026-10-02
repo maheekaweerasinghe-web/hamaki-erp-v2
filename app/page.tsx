@@ -271,6 +271,9 @@ useEffect(() => {
 }, [message, toastType]);
 
   const [orderNo, setOrderNo] = useState("");
+  const orderNoRef = useRef("");
+  const orderNoSalesCodeRef = useRef("");
+  const orderNoInFlightRef = useRef<{ code: string; promise: Promise<string | null> } | null>(null);
   const [loadingOrderNo, setLoadingOrderNo] = useState(false);
   const [loadingUser, setLoadingUser] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -902,35 +905,66 @@ async function loadRecentInventoryMovements() {
   setRecentMovements(data || []);
 }
 
-  async function fetchNextOrderNo(salesCode?: string) {
-    const code = (salesCode || currentUser?.sales_code || "").trim();
+  async function fetchNextOrderNo(salesCode?: string, force = false) {
+    const code = (salesCode || currentUser?.sales_code || "").trim().toUpperCase();
 
     if (!code) {
       setMessage("Sales code not found");
       return null;
     }
 
-    try {
-      setLoadingOrderNo(true);
-
-      const { data, error } = await supabase.rpc("get_next_order_no", {
-        p_sales_code: code,
-      });
-
-      if (error) {
-        setMessage("Error generating order number: " + error.message);
-        return null;
+    // Reuse the number already reserved for the current blank sale.
+    // This prevents duplicate auth callbacks or Clear Sale from consuming
+    // extra per-salesperson sequence numbers.
+    if (
+      !force &&
+      orderNoRef.current &&
+      orderNoSalesCodeRef.current === code
+    ) {
+      if (orderNo !== orderNoRef.current) {
+        setOrderNo(orderNoRef.current);
       }
-
-      const newOrderNo = String(data || "");
-      setOrderNo(newOrderNo);
-      return newOrderNo;
-    } catch (err: any) {
-      setMessage("Error generating order number: " + (err?.message || "Unknown error"));
-      return null;
-    } finally {
-      setLoadingOrderNo(false);
+      return orderNoRef.current;
     }
+
+    // If the same salesperson already has a number request in flight,
+    // share that request instead of incrementing the sequence twice.
+    const inFlight = orderNoInFlightRef.current;
+    if (!force && inFlight?.code === code) {
+      return inFlight.promise;
+    }
+
+    const request = (async (): Promise<string | null> => {
+      try {
+        setLoadingOrderNo(true);
+
+        const { data, error } = await supabase.rpc("get_next_order_no", {
+          p_sales_code: code,
+        });
+
+        if (error) {
+          setMessage("Error generating order number: " + error.message);
+          return null;
+        }
+
+        const newOrderNo = String(data || "");
+        orderNoRef.current = newOrderNo;
+        orderNoSalesCodeRef.current = code;
+        setOrderNo(newOrderNo);
+        return newOrderNo;
+      } catch (err: any) {
+        setMessage("Error generating order number: " + (err?.message || "Unknown error"));
+        return null;
+      } finally {
+        setLoadingOrderNo(false);
+        if (orderNoInFlightRef.current?.code === code) {
+          orderNoInFlightRef.current = null;
+        }
+      }
+    })();
+
+    orderNoInFlightRef.current = { code, promise: request };
+    return request;
   }
 
   function pickProductById(id: string) {
@@ -1046,9 +1080,8 @@ async function loadRecentInventoryMovements() {
 
     setMessage("Sale cleared ✅");
 
-    if (currentUser?.sales_code) {
-      await fetchNextOrderNo(currentUser.sales_code);
-    }
+    // Keep the currently reserved order number. No order was saved,
+    // so there is no reason to consume another sequence number.
 
     setTimeout(() => {
       productSearchRef.current?.focus();
@@ -2150,7 +2183,9 @@ async function fetchDispatchedOrdersLast7Days(phoneQuery = "") {
     setCart([]);
     resetItemEntry();
 
-    await fetchNextOrderNo(currentUser.sales_code);
+    orderNoRef.current = "";
+    orderNoSalesCodeRef.current = "";
+    await fetchNextOrderNo(currentUser.sales_code, true);
 
     setTimeout(() => {
       productSearchRef.current?.focus();
@@ -2207,6 +2242,10 @@ async function fetchDispatchedOrdersLast7Days(phoneQuery = "") {
 async function handleSignOut() {
   try {
     await supabase.auth.signOut();
+    orderNoRef.current = "";
+    orderNoSalesCodeRef.current = "";
+    orderNoInFlightRef.current = null;
+    setOrderNo("");
     setCurrentUser(null);
     setAuthMode("signin");
     setAuthEmail("");
