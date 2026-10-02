@@ -620,6 +620,26 @@ useEffect(() => {
   void loadRMTabData();
 }, [activeTab]);
 
+useEffect(() => {
+  if (activeTab !== "rm") return;
+
+  const t = setTimeout(() => {
+    void fetchRMRecentRows();
+  }, 300);
+
+  return () => clearTimeout(t);
+}, [
+  activeTab,
+  rmHistoryMaterial,
+  rmHistoryVendor,
+  rmHistoryReference,
+  rmHistoryEnteredBy,
+  rmHistoryDateFrom,
+  rmHistoryDateTo,
+  rmHistoryType,
+  rmHistoryStatus,
+]);
+
   useEffect(() => {
     const t = setTimeout(() => {
       productSearchRef.current?.focus();
@@ -676,78 +696,7 @@ useEffect(() => {
   const rmUnitCostNum = Number(rmUnitCost || 0);
   const rmTotal = rmQtyNum * rmUnitCostNum;
 
-  const filteredRmRecentRows = useMemo(() => {
-    const materialQ = rmHistoryMaterial.trim().toLowerCase();
-    const vendorQ = rmHistoryVendor.trim().toLowerCase();
-    const referenceQ = rmHistoryReference.trim().toLowerCase();
-    const enteredByQ = rmHistoryEnteredBy.trim().toLowerCase();
-
-    return rmRecentRows.filter((row) => {
-      if (rmHistoryType !== "ALL" && row.movement_type !== rmHistoryType) return false;
-
-      const rowStatus = row.voided_at ? "VOIDED" : "ACTIVE";
-      if (rmHistoryStatus !== "ALL" && rowStatus !== rmHistoryStatus) return false;
-
-      const movementDate = String(row.movement_date || "").slice(0, 10);
-      if (rmHistoryDateFrom && movementDate < rmHistoryDateFrom) return false;
-      if (rmHistoryDateTo && movementDate > rmHistoryDateTo) return false;
-
-      if (materialQ) {
-        const materialText = [
-          row.id,
-          row.material_code,
-          row.material_name,
-          row.variant || "",
-          row.unit || "",
-        ]
-          .join(" ")
-          .toLowerCase();
-
-        const words = materialQ.split(/\s+/).filter(Boolean);
-        if (!words.every((word) => materialText.includes(word))) return false;
-      }
-
-      if (
-        vendorQ &&
-        !String(row.vendor_name || "").toLowerCase().includes(vendorQ)
-      ) {
-        return false;
-      }
-
-      if (referenceQ) {
-        const referenceText = [
-          row.reference || "",
-          row.note || "",
-          row.void_reason || "",
-          row.id,
-        ]
-          .join(" ")
-          .toLowerCase();
-
-        const words = referenceQ.split(/\s+/).filter(Boolean);
-        if (!words.every((word) => referenceText.includes(word))) return false;
-      }
-
-      if (
-        enteredByQ &&
-        !String(row.entered_by_name || "").toLowerCase().includes(enteredByQ)
-      ) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [
-    rmRecentRows,
-    rmHistoryMaterial,
-    rmHistoryVendor,
-    rmHistoryReference,
-    rmHistoryEnteredBy,
-    rmHistoryDateFrom,
-    rmHistoryDateTo,
-    rmHistoryType,
-    rmHistoryStatus,
-  ]);
+  const filteredRmRecentRows = rmRecentRows;
 
     const filteredInventoryProducts = useMemo(() => {
     const q = inventorySearch.trim().toLowerCase();
@@ -1288,28 +1237,16 @@ async function fetchRMBalanceRows() {
 }
 
 async function fetchRMRecentRows() {
-  const { data, error } = await supabase
-    .from("rm_movements")
-    .select(`
-      id,
-      movement_date,
-      movement_type,
-      qty_in,
-      qty_out,
-      unit,
-      unit_cost,
-      line_value,
-      note,
-      reference,
-      created_at,
-      voided_at,
-      void_reason,
-      rm_materials!inner(material_code, material_name, variant),
-      rm_vendors(vendor_name),
-      users!rm_movements_entered_by_user_id_fkey(full_name)
-    `)
-    .order("created_at", { ascending: false })
-    .limit(100);
+  const { data, error } = await supabase.rpc("search_rm_movements", {
+    p_material_query: rmHistoryMaterial.trim() || null,
+    p_vendor_query: rmHistoryVendor.trim() || null,
+    p_reference_query: rmHistoryReference.trim() || null,
+    p_entered_by_query: rmHistoryEnteredBy.trim() || null,
+    p_date_from: rmHistoryDateFrom || null,
+    p_date_to: rmHistoryDateTo || null,
+    p_movement_type: rmHistoryType === "ALL" ? null : rmHistoryType,
+    p_status: rmHistoryStatus === "ALL" ? null : rmHistoryStatus,
+  });
 
   if (error) {
     setMessage("RM movement history load failed: " + error.message);
@@ -1330,11 +1267,11 @@ async function fetchRMRecentRows() {
     created_at: row.created_at,
     voided_at: row.voided_at,
     void_reason: row.void_reason,
-    material_code: row.rm_materials?.material_code || "",
-    material_name: row.rm_materials?.material_name || "",
-    variant: row.rm_materials?.variant || "",
-    vendor_name: row.rm_vendors?.vendor_name || null,
-    entered_by_name: row.users?.full_name || null,
+    material_code: row.material_code || "",
+    material_name: row.material_name || "",
+    variant: row.variant || "",
+    vendor_name: row.vendor_name || null,
+    entered_by_name: row.entered_by_name || null,
   }));
 
   setRmRecentRows(rows);
@@ -2797,7 +2734,7 @@ async function handleSignOut() {
             <div>
               <h3 className="text-[18px] font-bold">RM Movement History</h3>
               <div className="mt-1 text-sm text-[var(--muted)]">
-                Latest 100 entries. Filter each field separately to find the exact movement.
+                Shows the latest 100 by default. When you use any filter, it searches the full RM movement history.
               </div>
             </div>
 
