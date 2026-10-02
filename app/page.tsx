@@ -2741,8 +2741,13 @@ async function handleSignOut() {
         <div className="my-6 h-px bg-[#d7dee8]" />
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 items-start">
-          <div className="pr-4 md:border-r md:border-gray-200">
-            <h3 className="mb-4 text-[18px] font-bold">Quick Add New Material</h3>
+          <div className="rounded-[18px] border border-green-200 bg-green-50 p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-[18px] font-bold text-green-900">Quick Add New Material</h3>
+              <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-green-700">
+                Material
+              </span>
+            </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
@@ -2795,8 +2800,13 @@ async function handleSignOut() {
             </div>
           </div>
 
-          <div className="pl-4">
-            <h3 className="mb-4 text-[18px] font-bold">Quick Add New Vendor</h3>
+          <div className="rounded-[18px] border border-purple-200 bg-purple-50 p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-[18px] font-bold text-purple-900">Quick Add New Vendor</h3>
+              <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-purple-700">
+                Vendor
+              </span>
+            </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
