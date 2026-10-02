@@ -213,7 +213,11 @@ function shippingLabelHtml(order: any) {
       : "";
 
   const waybill = String(order.koombiyo_waybill_id || "");
-  const phone = String(order.phone_primary || order.phone_secondary || "");
+  const phones = [
+    String(order.phone_primary || "").trim(),
+    String(order.phone_secondary || "").trim(),
+  ].filter(Boolean);
+  const phone = Array.from(new Set(phones)).join(" / ");
   const address = [
     String(order.address_snapshot || order.address || "").trim(),
     String(order.koombiyo_city_name || order.city_snapshot || order.city || "").trim(),
@@ -326,7 +330,9 @@ export default function PendingOrdersV2({
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [actingId, setActingId] = useState("");
-  const [actingType, setActingType] = useState<"create" | "cancel" | "edit" | "print" | "">("");
+  const [actingType, setActingType] = useState<
+    "create" | "dispatch" | "cancel" | "edit" | "print" | ""
+  >("");
   const [bulkActing, setBulkActing] = useState(false);
 
   const [edit, setEdit] = useState<EditState | null>(null);
@@ -691,6 +697,43 @@ export default function PendingOrdersV2({
       await loadPending(query, true);
     } catch (err: any) {
       showError("Koombiyo creation failed: " + (err?.message || "Unknown error"));
+    } finally {
+      setActingId("");
+      setActingType("");
+    }
+  }
+
+  async function quickDispatch(row: PendingRow) {
+    if (row.koombiyo_waybill_id) {
+      showInfo(
+        `Order ${row.order_no} already has a Koombiyo waybill. Dispatch it by barcode scan instead.`
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Quick dispatch ${row.order_no} as a NON-KOOMBIYO order?\n\nUse this only when the parcel is being sent by another delivery method and is physically ready to leave.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setActingId(row.order_id);
+      setActingType("dispatch");
+      showInfo(`Dispatching ${row.order_no}...`);
+
+      const { error } = await supabase.rpc("update_order_status", {
+        p_order_id: row.order_id,
+        p_new_status: "DISPATCHED",
+        p_action_by_user_id: currentUser.id,
+      });
+
+      if (error) throw new Error(error.message);
+
+      showSuccess(`Order ${row.order_no} dispatched ✅`);
+      await loadPending(query, true);
+    } catch (err: any) {
+      showError("Quick dispatch failed: " + (err?.message || "Unknown error"));
     } finally {
       setActingId("");
       setActingType("");
@@ -1220,7 +1263,7 @@ export default function PendingOrdersV2({
           <div>
             <h2 className="text-[22px] font-bold text-[var(--text)]">Pending Orders</h2>
             <div className="mt-1 text-sm text-[var(--muted)]">
-              Edit first, create Koombiyo shipment, print label, then physically dispatch by barcode scan.
+              Koombiyo orders: create shipment, print label, then dispatch by barcode scan. Other delivery methods: use Quick Dispatch when the parcel is ready to leave.
             </div>
           </div>
 
@@ -1344,16 +1387,30 @@ export default function PendingOrdersV2({
                           </button>
 
                           {!locked ? (
-                            <button
-                              type="button"
-                              className="primary-btn h-10 w-[145px] whitespace-nowrap text-[13px]"
-                              disabled={actingId === row.order_id || bulkActing}
-                              onClick={() => void createShipment(row)}
-                            >
-                              {actingId === row.order_id && actingType === "create"
-                                ? "Creating..."
-                                : "Create Koombiyo"}
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                className="primary-btn h-10 w-[145px] whitespace-nowrap text-[13px]"
+                                disabled={actingId === row.order_id || bulkActing}
+                                onClick={() => void createShipment(row)}
+                              >
+                                {actingId === row.order_id && actingType === "create"
+                                  ? "Creating..."
+                                  : "Create Koombiyo"}
+                              </button>
+
+                              <button
+                                type="button"
+                                className="secondary-btn h-10 w-[145px] whitespace-nowrap text-[13px]"
+                                disabled={actingId === row.order_id || bulkActing}
+                                onClick={() => void quickDispatch(row)}
+                                title="For parcels sent by a non-Koombiyo delivery method"
+                              >
+                                {actingId === row.order_id && actingType === "dispatch"
+                                  ? "Dispatching..."
+                                  : "Quick Dispatch"}
+                              </button>
+                            </>
                           ) : (
                             <button
                               type="button"
