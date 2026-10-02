@@ -3467,8 +3467,13 @@ async function handleSignOut() {
 
     <div className="my-6 h-px bg-[#d7dee8]" />
 
-    <div className="rounded-[18px] border border-[#d7dee8] bg-white p-5">
-      <h3 className="mb-4 text-[18px] font-bold">Register New Product</h3>
+    <div className="rounded-[18px] border border-purple-200 bg-purple-50 p-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h3 className="text-[18px] font-bold text-purple-900">Register New Product</h3>
+        <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-purple-700">
+          Product
+        </span>
+      </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div>
