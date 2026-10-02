@@ -354,6 +354,10 @@ const [stockStats, setStockStats] = useState({
   const [inventoryNote, setInventoryNote] = useState("");
   const [inventorySubmitting, setInventorySubmitting] = useState(false);
   const [recentMovements, setRecentMovements] = useState<any[]>([]);
+  const [quickReturnBarcode, setQuickReturnBarcode] = useState("");
+  const [quickReturnSubmitting, setQuickReturnSubmitting] = useState(false);
+  const [quickReturnResult, setQuickReturnResult] = useState<any | null>(null);
+  const quickReturnInputRef = useRef<HTMLInputElement | null>(null);
 
   const [dashboardData, setDashboardData] = useState<any>({});
   const [dashboardLoading, setDashboardLoading] = useState(false);
@@ -897,6 +901,7 @@ useEffect(() => {
 useEffect(() => {
   if (activeTab !== "inventory") return;
   void loadRecentInventoryMovements();
+  setTimeout(() => quickReturnInputRef.current?.focus(), 0);
 }, [activeTab]);
 
 async function loadRecentInventoryMovements() {
@@ -927,6 +932,50 @@ async function loadRecentInventoryMovements() {
   }
 
   setRecentMovements(data || []);
+}
+
+async function handleQuickReturn() {
+  const waybill = quickReturnBarcode.trim();
+
+  if (!waybill) {
+    showError("Scan or enter a waybill barcode.");
+    return;
+  }
+
+  try {
+    setQuickReturnSubmitting(true);
+    setQuickReturnResult(null);
+    showInfo("Processing COD return...");
+
+    const { data, error } = await supabase.rpc("quick_return_cod", {
+      p_waybill_id: waybill,
+    });
+
+    if (error) {
+      showError(error.message);
+      return;
+    }
+
+    const result = typeof data === "string" ? JSON.parse(data) : data;
+    setQuickReturnResult(result || null);
+    setQuickReturnBarcode("");
+
+    const qty = Number(result?.total_qty || 0);
+    const itemCount = Number(result?.item_count || 0);
+    showSuccess(
+      `Return added to inventory ✅ ${result?.order_no || ""} • ${qty} unit${qty === 1 ? "" : "s"} • ${itemCount} product${itemCount === 1 ? "" : "s"}`
+    );
+
+    await Promise.all([
+      loadProductsForInventoryRefresh(),
+      loadRecentInventoryMovements(),
+    ]);
+  } catch (err: any) {
+    showError("Quick return failed: " + (err?.message || "Unknown error"));
+  } finally {
+    setQuickReturnSubmitting(false);
+    setTimeout(() => quickReturnInputRef.current?.focus(), 0);
+  }
 }
 
   async function fetchNextOrderNo(salesCode?: string, force = false) {
@@ -3178,6 +3227,70 @@ async function handleSignOut() {
 {(currentUser?.role === "ADMIN" || currentUser?.role === "ACCOUNTANT") && activeTab === "inventory" && (
   <div className="soft-card mt-4 p-5">
     <h2 className="mb-6 text-[22px] font-bold text-[var(--text)]">Inventory Entry</h2>
+
+    <div className="mb-6 rounded-[18px] border border-green-200 bg-green-50 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-[18px] font-bold text-green-900">Quick Return Entry</h3>
+          <p className="mt-1 text-[12px] text-green-800">
+            Scan the returned parcel barcode. The ERP restores every item from the original order to inventory in one transaction.
+          </p>
+        </div>
+        <div className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-green-700">
+          Return COD
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_180px]">
+        <input
+          ref={quickReturnInputRef}
+          className="soft-input bg-white font-semibold"
+          value={quickReturnBarcode}
+          onChange={(e) => setQuickReturnBarcode(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              if (!quickReturnSubmitting) void handleQuickReturn();
+            }
+          }}
+          placeholder="Scan waybill barcode..."
+          autoComplete="off"
+          disabled={quickReturnSubmitting}
+        />
+        <button
+          className="primary-btn w-full"
+          onClick={() => void handleQuickReturn()}
+          disabled={quickReturnSubmitting || !quickReturnBarcode.trim()}
+        >
+          {quickReturnSubmitting ? "Processing..." : "Process Return"}
+        </button>
+      </div>
+
+      {quickReturnResult && (
+        <div className="mt-4 rounded-[14px] border border-green-200 bg-white p-4 text-[13px]">
+          <div className="font-bold text-green-800">
+            {quickReturnResult.order_no} • Waybill {quickReturnResult.waybill_id}
+          </div>
+          <div className="mt-1 text-slate-600">
+            Added {Number(quickReturnResult.total_qty || 0)} units across {Number(quickReturnResult.item_count || 0)} products.
+          </div>
+          {!!quickReturnResult.items?.length && (
+            <div className="mt-3 space-y-1">
+              {quickReturnResult.items.map((item: any) => (
+                <div key={item.product_id} className="flex flex-wrap justify-between gap-2">
+                  <span>{item.sku} • {item.product}</span>
+                  <span className="font-bold">Qty {Number(item.qty || 0)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+
+    <div className="mb-5 text-[12px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+      Manual Inventory Entry
+    </div>
 
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <div>
