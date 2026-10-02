@@ -302,8 +302,14 @@ const [stockStats, setStockStats] = useState({
   const [rmVendors, setRmVendors] = useState<RMVendor[]>([]);
   const [rmBalanceRows, setRmBalanceRows] = useState<RMBalanceRow[]>([]);
   const [rmRecentRows, setRmRecentRows] = useState<RMMovementRow[]>([]);
-  const [rmHistorySearch, setRmHistorySearch] = useState("");
+  const [rmHistoryMaterial, setRmHistoryMaterial] = useState("");
+  const [rmHistoryVendor, setRmHistoryVendor] = useState("");
+  const [rmHistoryReference, setRmHistoryReference] = useState("");
+  const [rmHistoryEnteredBy, setRmHistoryEnteredBy] = useState("");
+  const [rmHistoryDateFrom, setRmHistoryDateFrom] = useState("");
+  const [rmHistoryDateTo, setRmHistoryDateTo] = useState("");
   const [rmHistoryType, setRmHistoryType] = useState<"ALL" | "PURCHASE" | "ISSUE">("ALL");
+  const [rmHistoryStatus, setRmHistoryStatus] = useState<"ALL" | "ACTIVE" | "VOIDED">("ALL");
   const [rmVoidingId, setRmVoidingId] = useState("");
 
   const [rmDate, setRmDate] = useState(todayDisplayLK());
@@ -671,29 +677,77 @@ useEffect(() => {
   const rmTotal = rmQtyNum * rmUnitCostNum;
 
   const filteredRmRecentRows = useMemo(() => {
-    const q = rmHistorySearch.trim().toLowerCase();
+    const materialQ = rmHistoryMaterial.trim().toLowerCase();
+    const vendorQ = rmHistoryVendor.trim().toLowerCase();
+    const referenceQ = rmHistoryReference.trim().toLowerCase();
+    const enteredByQ = rmHistoryEnteredBy.trim().toLowerCase();
 
     return rmRecentRows.filter((row) => {
       if (rmHistoryType !== "ALL" && row.movement_type !== rmHistoryType) return false;
-      if (!q) return true;
 
-      const haystack = [
-        row.id,
-        row.material_code,
-        row.material_name,
-        row.variant || "",
-        row.vendor_name || "",
-        row.note || "",
-        row.reference || "",
-        row.entered_by_name || "",
-        row.void_reason || "",
-      ]
-        .join(" ")
-        .toLowerCase();
+      const rowStatus = row.voided_at ? "VOIDED" : "ACTIVE";
+      if (rmHistoryStatus !== "ALL" && rowStatus !== rmHistoryStatus) return false;
 
-      return q.split(/\s+/).filter(Boolean).every((word) => haystack.includes(word));
+      const movementDate = String(row.movement_date || "").slice(0, 10);
+      if (rmHistoryDateFrom && movementDate < rmHistoryDateFrom) return false;
+      if (rmHistoryDateTo && movementDate > rmHistoryDateTo) return false;
+
+      if (materialQ) {
+        const materialText = [
+          row.id,
+          row.material_code,
+          row.material_name,
+          row.variant || "",
+          row.unit || "",
+        ]
+          .join(" ")
+          .toLowerCase();
+
+        const words = materialQ.split(/\s+/).filter(Boolean);
+        if (!words.every((word) => materialText.includes(word))) return false;
+      }
+
+      if (
+        vendorQ &&
+        !String(row.vendor_name || "").toLowerCase().includes(vendorQ)
+      ) {
+        return false;
+      }
+
+      if (referenceQ) {
+        const referenceText = [
+          row.reference || "",
+          row.note || "",
+          row.void_reason || "",
+          row.id,
+        ]
+          .join(" ")
+          .toLowerCase();
+
+        const words = referenceQ.split(/\s+/).filter(Boolean);
+        if (!words.every((word) => referenceText.includes(word))) return false;
+      }
+
+      if (
+        enteredByQ &&
+        !String(row.entered_by_name || "").toLowerCase().includes(enteredByQ)
+      ) {
+        return false;
+      }
+
+      return true;
     });
-  }, [rmRecentRows, rmHistorySearch, rmHistoryType]);
+  }, [
+    rmRecentRows,
+    rmHistoryMaterial,
+    rmHistoryVendor,
+    rmHistoryReference,
+    rmHistoryEnteredBy,
+    rmHistoryDateFrom,
+    rmHistoryDateTo,
+    rmHistoryType,
+    rmHistoryStatus,
+  ]);
 
     const filteredInventoryProducts = useMemo(() => {
     const q = inventorySearch.trim().toLowerCase();
@@ -2739,32 +2793,123 @@ async function handleSignOut() {
         <div className="my-6 h-px bg-[#d7dee8]" />
 
         <div>
-          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div className="mb-4">
             <div>
               <h3 className="text-[18px] font-bold">RM Movement History</h3>
               <div className="mt-1 text-sm text-[var(--muted)]">
-                Latest 100 entries. Voided rows stay visible for audit.
+                Latest 100 entries. Filter each field separately to find the exact movement.
               </div>
             </div>
 
-            <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
-              <input
-                className="soft-input min-w-[260px]"
-                value={rmHistorySearch}
-                onChange={(e) => setRmHistorySearch(e.target.value)}
-                placeholder="Search material, vendor, note, ID..."
-              />
-              <select
-                className="soft-input sm:w-[160px]"
-                value={rmHistoryType}
-                onChange={(e) =>
-                  setRmHistoryType(e.target.value as "ALL" | "PURCHASE" | "ISSUE")
-                }
-              >
-                <option value="ALL">All types</option>
-                <option value="PURCHASE">Purchase</option>
-                <option value="ISSUE">Issue</option>
-              </select>
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+              <div>
+                <label className="soft-label">Material / Movement ID</label>
+                <input
+                  className="soft-input"
+                  value={rmHistoryMaterial}
+                  onChange={(e) => setRmHistoryMaterial(e.target.value)}
+                  placeholder="RM0009, Printed Mesh, 66466e25..."
+                />
+              </div>
+
+              <div>
+                <label className="soft-label">Vendor</label>
+                <input
+                  className="soft-input"
+                  value={rmHistoryVendor}
+                  onChange={(e) => setRmHistoryVendor(e.target.value)}
+                  placeholder="Vendor name"
+                />
+              </div>
+
+              <div>
+                <label className="soft-label">Reference / Note</label>
+                <input
+                  className="soft-input"
+                  value={rmHistoryReference}
+                  onChange={(e) => setRmHistoryReference(e.target.value)}
+                  placeholder="Invoice, Production, void reason..."
+                />
+              </div>
+
+              <div>
+                <label className="soft-label">Entered By</label>
+                <input
+                  className="soft-input"
+                  value={rmHistoryEnteredBy}
+                  onChange={(e) => setRmHistoryEnteredBy(e.target.value)}
+                  placeholder="User name"
+                />
+              </div>
+
+              <div>
+                <label className="soft-label">From Date</label>
+                <input
+                  type="date"
+                  className="soft-input"
+                  value={rmHistoryDateFrom}
+                  onChange={(e) => setRmHistoryDateFrom(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="soft-label">To Date</label>
+                <input
+                  type="date"
+                  className="soft-input"
+                  value={rmHistoryDateTo}
+                  onChange={(e) => setRmHistoryDateTo(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="soft-label">Type</label>
+                <select
+                  className="soft-input"
+                  value={rmHistoryType}
+                  onChange={(e) =>
+                    setRmHistoryType(e.target.value as "ALL" | "PURCHASE" | "ISSUE")
+                  }
+                >
+                  <option value="ALL">All types</option>
+                  <option value="PURCHASE">Purchase</option>
+                  <option value="ISSUE">Issue</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="soft-label">Status</label>
+                <div className="flex gap-2">
+                  <select
+                    className="soft-input"
+                    value={rmHistoryStatus}
+                    onChange={(e) =>
+                      setRmHistoryStatus(e.target.value as "ALL" | "ACTIVE" | "VOIDED")
+                    }
+                  >
+                    <option value="ALL">All statuses</option>
+                    <option value="ACTIVE">Active</option>
+                    <option value="VOIDED">Voided</option>
+                  </select>
+
+                  <button
+                    type="button"
+                    className="secondary-btn whitespace-nowrap"
+                    onClick={() => {
+                      setRmHistoryMaterial("");
+                      setRmHistoryVendor("");
+                      setRmHistoryReference("");
+                      setRmHistoryEnteredBy("");
+                      setRmHistoryDateFrom("");
+                      setRmHistoryDateTo("");
+                      setRmHistoryType("ALL");
+                      setRmHistoryStatus("ALL");
+                    }}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
