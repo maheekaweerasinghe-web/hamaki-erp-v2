@@ -179,11 +179,15 @@ type RMMovementRow = {
   unit_cost: number;
   line_value: number;
   note: string | null;
+  reference: string | null;
   created_at: string;
+  voided_at: string | null;
+  void_reason: string | null;
   material_code: string;
   material_name: string;
   variant: string | null;
   vendor_name: string | null;
+  entered_by_name: string | null;
 };
 
 export default function Home() {
@@ -298,6 +302,9 @@ const [stockStats, setStockStats] = useState({
   const [rmVendors, setRmVendors] = useState<RMVendor[]>([]);
   const [rmBalanceRows, setRmBalanceRows] = useState<RMBalanceRow[]>([]);
   const [rmRecentRows, setRmRecentRows] = useState<RMMovementRow[]>([]);
+  const [rmHistorySearch, setRmHistorySearch] = useState("");
+  const [rmHistoryType, setRmHistoryType] = useState<"ALL" | "PURCHASE" | "ISSUE">("ALL");
+  const [rmVoidingId, setRmVoidingId] = useState("");
 
   const [rmDate, setRmDate] = useState(todayDisplayLK());
   const [rmType, setRmType] = useState<"PURCHASE" | "ISSUE">("PURCHASE");
@@ -662,6 +669,31 @@ useEffect(() => {
   const rmQtyNum = Number(rmQty || 0);
   const rmUnitCostNum = Number(rmUnitCost || 0);
   const rmTotal = rmQtyNum * rmUnitCostNum;
+
+  const filteredRmRecentRows = useMemo(() => {
+    const q = rmHistorySearch.trim().toLowerCase();
+
+    return rmRecentRows.filter((row) => {
+      if (rmHistoryType !== "ALL" && row.movement_type !== rmHistoryType) return false;
+      if (!q) return true;
+
+      const haystack = [
+        row.id,
+        row.material_code,
+        row.material_name,
+        row.variant || "",
+        row.vendor_name || "",
+        row.note || "",
+        row.reference || "",
+        row.entered_by_name || "",
+        row.void_reason || "",
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return q.split(/\s+/).filter(Boolean).every((word) => haystack.includes(word));
+    });
+  }, [rmRecentRows, rmHistorySearch, rmHistoryType]);
 
     const filteredInventoryProducts = useMemo(() => {
     const q = inventorySearch.trim().toLowerCase();
@@ -1214,15 +1246,19 @@ async function fetchRMRecentRows() {
       unit_cost,
       line_value,
       note,
+      reference,
       created_at,
+      voided_at,
+      void_reason,
       rm_materials!inner(material_code, material_name, variant),
-      rm_vendors(vendor_name)
+      rm_vendors(vendor_name),
+      users!rm_movements_entered_by_user_id_fkey(full_name)
     `)
     .order("created_at", { ascending: false })
-    .limit(20);
+    .limit(100);
 
   if (error) {
-    setMessage("Recent RM movements load failed: " + error.message);
+    setMessage("RM movement history load failed: " + error.message);
     return;
   }
 
@@ -1236,11 +1272,15 @@ async function fetchRMRecentRows() {
     unit_cost: Number(row.unit_cost || 0),
     line_value: Number(row.line_value || 0),
     note: row.note,
+    reference: row.reference,
     created_at: row.created_at,
+    voided_at: row.voided_at,
+    void_reason: row.void_reason,
     material_code: row.rm_materials?.material_code || "",
     material_name: row.rm_materials?.material_name || "",
     variant: row.rm_materials?.variant || "",
     vendor_name: row.rm_vendors?.vendor_name || null,
+    entered_by_name: row.users?.full_name || null,
   }));
 
   setRmRecentRows(rows);
@@ -1315,6 +1355,11 @@ async function handleSubmitRM() {
     return;
   }
 
+  if (rmType === "PURCHASE" && !selectedRmVendorId) {
+    setMessage("Vendor is required for a purchase");
+    return;
+  }
+
   if (rmType === "PURCHASE" && rmUnitCostNum <= 0) {
     setMessage("Unit cost must be more than 0 for purchase");
     return;
@@ -1324,21 +1369,16 @@ async function handleSubmitRM() {
     setRmSubmitting(true);
     showInfo("Saving RM entry...");
 
-    const payload = {
-      movement_date: toOrderDateISO(rmDate),
-      movement_type: rmType,
-      rm_material_id: selectedRmMaterial.id,
-      vendor_id: selectedRmVendorId || null,
-      qty_in: rmType === "PURCHASE" ? Number(rmQtyNum.toFixed(2)) : 0,
-      qty_out: rmType === "ISSUE" ? Number(rmQtyNum.toFixed(2)) : 0,
-      unit: selectedRmMaterial.unit || null,
-      unit_cost: Number(rmUnitCostNum.toFixed(2)),
-      line_value: Number(rmTotal.toFixed(2)),
-      note: rmNote || null,
-      entered_by_user_id: currentUser.id,
-    };
-
-    const { error } = await supabase.from("rm_movements").insert(payload);
+    const { error } = await supabase.rpc("create_rm_movement", {
+      p_movement_date: toOrderDateISO(rmDate),
+      p_movement_type: rmType,
+      p_rm_material_id: selectedRmMaterial.id,
+      p_qty: Number(rmQtyNum.toFixed(2)),
+      p_vendor_id: rmType === "PURCHASE" ? selectedRmVendorId : null,
+      p_unit_cost: rmType === "PURCHASE" ? Number(rmUnitCostNum.toFixed(2)) : null,
+      p_note: rmNote.trim() || null,
+      p_reference: null,
+    });
 
     if (error) {
       showError("RM save failed: " + error.message);
@@ -1352,6 +1392,49 @@ async function handleSubmitRM() {
     showError("RM save failed: " + (err?.message || "Unknown error"));
   } finally {
     setRmSubmitting(false);
+  }
+}
+
+async function voidRMMovement(row: RMMovementRow) {
+  if (row.voided_at) {
+    showInfo("This RM movement is already voided.");
+    return;
+  }
+
+  const qty = row.movement_type === "PURCHASE" ? row.qty_in : row.qty_out;
+  const confirmed = window.confirm(
+    `Void this RM movement?\n\n${row.material_code} • ${row.material_name}${row.variant ? ` • ${row.variant}` : ""}\n${row.movement_type} • ${qty} ${row.unit || ""} • ${formatRs(Number(row.line_value || 0))}\n\nThe original record will remain in history.`
+  );
+
+  if (!confirmed) return;
+
+  const reason = window.prompt(
+    "Reason for voiding this movement (required):",
+    ""
+  );
+
+  if (!reason?.trim()) {
+    showError("Void reason is required.");
+    return;
+  }
+
+  try {
+    setRmVoidingId(row.id);
+    showInfo("Voiding RM movement...");
+
+    const { error } = await supabase.rpc("void_rm_movement", {
+      p_movement_id: row.id,
+      p_reason: reason.trim(),
+    });
+
+    if (error) throw error;
+
+    showSuccess("RM movement voided ✅");
+    await loadRMTabData();
+  } catch (err: any) {
+    showError("RM void failed: " + (err?.message || "Unknown error"));
+  } finally {
+    setRmVoidingId("");
   }
 }
 
@@ -2485,7 +2568,9 @@ async function handleSignOut() {
               value={selectedRmVendorId}
               onChange={(e) => setSelectedRmVendorId(e.target.value)}
             >
-              <option value="">(none)</option>
+              <option value="">
+                {rmType === "PURCHASE" ? "Select vendor (required)" : "(none)"}
+              </option>
               {rmVendors.map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.vendor_code} • {v.vendor_name}
@@ -2654,11 +2739,38 @@ async function handleSignOut() {
         <div className="my-6 h-px bg-[#d7dee8]" />
 
         <div>
-          <h3 className="mb-4 text-[18px] font-bold">Last 20 RM Movements</h3>
+          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h3 className="text-[18px] font-bold">RM Movement History</h3>
+              <div className="mt-1 text-sm text-[var(--muted)]">
+                Latest 100 entries. Voided rows stay visible for audit.
+              </div>
+            </div>
 
-          {rmRecentRows.length === 0 ? (
+            <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
+              <input
+                className="soft-input min-w-[260px]"
+                value={rmHistorySearch}
+                onChange={(e) => setRmHistorySearch(e.target.value)}
+                placeholder="Search material, vendor, note, ID..."
+              />
+              <select
+                className="soft-input sm:w-[160px]"
+                value={rmHistoryType}
+                onChange={(e) =>
+                  setRmHistoryType(e.target.value as "ALL" | "PURCHASE" | "ISSUE")
+                }
+              >
+                <option value="ALL">All types</option>
+                <option value="PURCHASE">Purchase</option>
+                <option value="ISSUE">Issue</option>
+              </select>
+            </div>
+          </div>
+
+          {filteredRmRecentRows.length === 0 ? (
             <div className="rounded-[16px] border border-[#d7dee8] bg-white p-4 text-[16px] text-[#6b7280]">
-              No RM movements yet
+              No matching RM movements
             </div>
           ) : (
             <div className="overflow-x-auto rounded-[16px] border border-[#d7dee8] bg-white">
@@ -2666,6 +2778,7 @@ async function handleSignOut() {
                 <thead>
                   <tr>
                     <th>Date</th>
+                    <th>Status</th>
                     <th>Type</th>
                     <th>Material</th>
                     <th>Vendor</th>
@@ -2673,52 +2786,101 @@ async function handleSignOut() {
                     <th>Unit</th>
                     <th className="num">Cost</th>
                     <th className="num">Value</th>
-                    <th>Note</th>
+                    <th>Reference / Note</th>
+                    <th>Entered By</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rmRecentRows.map((row) => (
-                    <tr key={row.id}>
+                  {filteredRmRecentRows.map((row) => (
+                    <tr
+                      key={row.id}
+                      className={row.voided_at ? "opacity-60" : ""}
+                    >
                       <td>{formatDateTime(row.movement_date)}</td>
                       <td>
-  {row.movement_type === "PURCHASE" && (
-    <span className="px-2 py-1 text-xs font-semibold rounded bg-green-100 text-green-700">
-      PURCHASE
-    </span>
-  )}
-
-  {row.movement_type === "ISSUE" && (
-    <span className="px-2 py-1 text-xs font-semibold rounded bg-red-100 text-red-700">
-      ISSUE
-    </span>
-  )}
-</td>
+                        {row.voided_at ? (
+                          <div>
+                            <span className="rounded bg-gray-200 px-2 py-1 text-xs font-semibold text-gray-700">
+                              VOIDED
+                            </span>
+                            {row.void_reason ? (
+                              <div className="mt-1 max-w-[180px] text-xs text-gray-500">
+                                {row.void_reason}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="rounded bg-green-100 px-2 py-1 text-xs font-semibold text-green-700">
+                            ACTIVE
+                          </span>
+                        )}
+                      </td>
                       <td>
-                        {row.material_code} • {row.material_name}
-                        {row.variant ? ` • ${row.variant}` : ""}
+                        {row.movement_type === "PURCHASE" ? (
+                          <span className="rounded bg-green-100 px-2 py-1 text-xs font-semibold text-green-700">
+                            PURCHASE
+                          </span>
+                        ) : (
+                          <span className="rounded bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
+                            ISSUE
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <div>
+                          {row.material_code} • {row.material_name}
+                          {row.variant ? ` • ${row.variant}` : ""}
+                        </div>
+                        <div className="mt-1 font-mono text-[11px] text-gray-400">
+                          {row.id.slice(0, 8)}
+                        </div>
                       </td>
                       <td>{row.vendor_name || "-"}</td>
                       <td className="num">
-                        <span className={
-  row.movement_type === "PURCHASE"
-    ? "text-green-600 font-semibold"
-    : "text-red-600 font-semibold"
-}>
-  {row.movement_type === "PURCHASE"
-    ? Number(row.qty_in || 0)
-    : Number(row.qty_out || 0)}
-</span>
+                        <span
+                          className={
+                            row.movement_type === "PURCHASE"
+                              ? "font-semibold text-green-600"
+                              : "font-semibold text-red-600"
+                          }
+                        >
+                          {row.movement_type === "PURCHASE"
+                            ? Number(row.qty_in || 0)
+                            : Number(row.qty_out || 0)}
+                        </span>
                       </td>
                       <td>{row.unit || "-"}</td>
                       <td className="num">{formatRs(Number(row.unit_cost || 0))}</td>
                       <td className="num">{formatRs(Number(row.line_value || 0))}</td>
-                      <td>{row.note || "-"}</td>
+                      <td>
+                        <div>{row.reference || row.note || "-"}</div>
+                        {row.reference && row.note ? (
+                          <div className="mt-1 text-xs text-gray-500">{row.note}</div>
+                        ) : null}
+                      </td>
+                      <td>{row.entered_by_name || "-"}</td>
+                      <td>
+                        {row.voided_at ? (
+                          <span className="text-xs text-gray-400">No action</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="h-9 whitespace-nowrap rounded-[10px] bg-[#fee2e2] px-3 text-[12px] font-bold text-[#b91c1c] disabled:opacity-50"
+                            disabled={rmVoidingId === row.id}
+                            onClick={() => void voidRMMovement(row)}
+                          >
+                            {rmVoidingId === row.id ? "Voiding..." : "Void"}
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
+        </div>
         </div>
       </>
     )}
