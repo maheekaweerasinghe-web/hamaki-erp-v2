@@ -1315,48 +1315,60 @@ export default function PendingOrdersV2({
             </div>
           </div>
 
-          <div className="flex w-full flex-wrap gap-2 md:w-auto md:items-end">
-            <div className="min-w-[280px] flex-1 md:flex-none">
-              <label className="soft-label">Search</label>
-              <input
-                className="soft-input"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Phone or order no"
-              />
+          <div className="w-full md:w-auto">
+            <div className="flex w-full items-end gap-2">
+              <div className="min-w-[280px] flex-1 md:flex-none">
+                <label className="soft-label">Search</label>
+                <input
+                  className="soft-input"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Phone or order no"
+                />
+              </div>
+
+              <button
+                type="button"
+                className="secondary-btn shrink-0"
+                onClick={() => void loadPending(query)}
+              >
+                Refresh
+              </button>
             </div>
 
-            <button type="button" className="secondary-btn" onClick={() => void loadPending(query)}>
-              Refresh
-            </button>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => void createSelectedShipments()}
+                disabled={bulkActing || selectedIds.length === 0}
+              >
+                {bulkActing ? "Creating..." : `Create Koombiyo (${selectedIds.length})`}
+              </button>
 
-            <button
-              type="button"
-              className="primary-btn"
-              onClick={() => void createSelectedShipments()}
-              disabled={bulkActing || selectedIds.length === 0}
-            >
-              {bulkActing ? "Creating..." : `Create Koombiyo (${selectedIds.length})`}
-            </button>
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() =>
+                  void printShippingLabels(
+                    selectedRows.filter((row) => row.koombiyo_waybill_id)
+                  )
+                }
+                disabled={selectedWaybills.length === 0}
+              >
+                Print Selected ({selectedWaybills.length})
+              </button>
 
-            <button
-              type="button"
-              className="secondary-btn"
-              onClick={() => void printShippingLabels(selectedRows.filter((row) => row.koombiyo_waybill_id))}
-              disabled={selectedWaybills.length === 0}
-            >
-              Print Selected ({selectedWaybills.length})
-            </button>
-
-            <button
-              type="button"
-              className="rounded-[10px] bg-[#dcfce7] px-4 py-2 font-bold text-[#166534] transition hover:bg-[#bbf7d0] disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={() => void quickDispatchSelected()}
-              disabled={bulkActing || selectedIds.length === 0}
-              title="Quick dispatch selected non-Koombiyo orders"
-            >
-              {bulkActing ? "Dispatching..." : `Quick Dispatch (${selectedIds.length})`}
-            </button>
+              <button
+                type="button"
+                className="rounded-[10px] bg-[#dcfce7] px-4 py-2 font-bold text-[#166534] transition hover:bg-[#bbf7d0] disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => void quickDispatchSelected()}
+                disabled={bulkActing || selectedIds.length === 0}
+                title="Quick dispatch selected non-Koombiyo orders"
+              >
+                {bulkActing ? "Dispatching..." : `Quick Dispatch (${selectedIds.length})`}
+              </button>
+            </div>
           </div>
         </div>
 
