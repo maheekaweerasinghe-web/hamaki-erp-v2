@@ -3777,10 +3777,10 @@ async function handleSignOut() {
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <div className="rounded-[18px] border border-[#d7dee8] bg-white p-5 shadow-sm">
+          <div className="rounded-[18px] border border-purple-200 bg-purple-50 p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-[18px] font-bold text-[var(--text)]">Last 5 Days Performance</h3>
-              <span className="rounded-full bg-[#f8fafc] px-3 py-1 text-xs font-semibold text-[var(--muted)]">
+              <h3 className="text-[18px] font-bold text-purple-900">Last 5 Days Performance</h3>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-purple-700">
                 newest first
               </span>
             </div>
@@ -3815,10 +3815,10 @@ async function handleSignOut() {
             </div>
           </div>
 
-          <div className="rounded-[18px] border border-[#d7dee8] bg-white p-5 shadow-sm">
+          <div className="rounded-[18px] border border-purple-200 bg-purple-50 p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-[18px] font-bold text-[var(--text)]">MTD by Platform</h3>
-              <span className="rounded-full bg-[#f8fafc] px-3 py-1 text-xs font-semibold text-[var(--muted)]">
+              <h3 className="text-[18px] font-bold text-purple-900">MTD by Platform</h3>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-purple-700">
                 highest sales first
               </span>
             </div>
