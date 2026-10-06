@@ -3857,7 +3857,7 @@ async function handleSignOut() {
         <div className="mt-6 rounded-[18px] border border-amber-200 bg-amber-50 p-5 shadow-sm">
           <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h3 className="text-[18px] font-bold text-amber-950">COD Return Performance</h3>
+              <h3 className="text-[18px] font-bold text-amber-950">COD Returns</h3>
               <div className="mt-1 text-[12px] text-amber-800">
                 Barcode-scanned parcel returns restored to inventory
               </div>
@@ -3892,7 +3892,7 @@ async function handleSignOut() {
             <div className="rounded-[16px] border border-amber-200 bg-white p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h4 className="font-bold text-[var(--text)]">This Month Return Breakdown</h4>
-                <span className="text-[11px] font-semibold text-[var(--muted)]">by product</span>
+                <span className="text-[11px] font-semibold text-[var(--muted)]">top 5 products</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-[13px] text-[#1f2a37]">
@@ -3905,7 +3905,7 @@ async function handleSignOut() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(dashboardData?.returns_products || []).map((row: any, i: number) => (
+                    {(dashboardData?.returns_products || []).slice(0, 5).map((row: any, i: number) => (
                       <tr key={i} className="border-t border-[#efe3c7]">
                         <td className="px-3 py-2">
                           <div className="font-bold">{row.sku || "-"}</div>
@@ -3936,7 +3936,9 @@ async function handleSignOut() {
                   <thead>
                     <tr className="bg-[#fffaf0] text-left">
                       <th className="px-3 py-2 font-bold">Month</th>
-                      <th className="px-3 py-2 font-bold text-right">Parcels</th>
+                      <th className="px-3 py-2 font-bold text-right">Sales</th>
+                      <th className="px-3 py-2 font-bold text-right">Returns</th>
+                      <th className="px-3 py-2 font-bold text-right">Return %</th>
                       <th className="px-3 py-2 font-bold text-right">Units</th>
                       <th className="px-3 py-2 font-bold text-right">Value</th>
                     </tr>
@@ -3945,7 +3947,11 @@ async function handleSignOut() {
                     {(dashboardData?.returns_last5months || []).map((row: any, i: number) => (
                       <tr key={i} className="border-t border-[#efe3c7]">
                         <td className="px-3 py-2 font-semibold">{row.month_label || row.month_start}</td>
+                        <td className="px-3 py-2 text-right">{Number(row.sales_orders || 0)}</td>
                         <td className="px-3 py-2 text-right font-bold">{Number(row.parcels || 0)}</td>
+                        <td className="px-3 py-2 text-right font-bold text-amber-700">
+                          {Number(row.return_rate || 0).toFixed(1)}%
+                        </td>
                         <td className="px-3 py-2 text-right">{Number(row.units || 0)}</td>
                         <td className="px-3 py-2 text-right">{formatRs(Number(row.value || 0))}</td>
                       </tr>
@@ -3957,12 +3963,12 @@ async function handleSignOut() {
           </div>
         </div>
 
-        <div className="mt-6 rounded-[18px] border border-[#d7dee8] bg-white p-5 shadow-sm">
+        <div className="mt-6 rounded-[18px] border border-sky-200 bg-sky-50 p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-[18px] font-bold text-[var(--text)]">
+            <h3 className="text-[18px] font-bold text-sky-950">
               Best Selling Products (MTD)
             </h3>
-            <span className="rounded-full bg-[#f8fafc] px-3 py-1 text-xs font-semibold text-[var(--muted)]">
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-sky-700">
               top 10 products
             </span>
           </div>
@@ -3970,7 +3976,7 @@ async function handleSignOut() {
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[14px] text-[#1f2a37]">
               <thead>
-                <tr className="bg-[#f8fafc] text-left">
+                <tr className="bg-sky-100/70 text-left">
                   <th className="px-4 py-3 font-bold">SKU</th>
                   <th className="px-4 py-3 font-bold">Product</th>
                   <th className="px-4 py-3 font-bold text-right">Units Sold</th>
