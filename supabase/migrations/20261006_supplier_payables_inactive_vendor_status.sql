@@ -40,13 +40,13 @@ select
   v.id as vendor_id,
   v.vendor_code,
   v.vendor_name,
-  v.status as vendor_status,
   coalesce(o.opening_amount, 0) as opening_payable,
   coalesce(p.purchases_since_start, 0) as purchases_since_start,
   coalesce(py.payments_since_start, 0) as payments_since_start,
   coalesce(o.opening_amount, 0)
     + coalesce(p.purchases_since_start, 0)
-    - coalesce(py.payments_since_start, 0) as outstanding
+    - coalesce(py.payments_since_start, 0) as outstanding,
+  v.status as vendor_status
 from public.rm_vendors v
 left join opening o on o.vendor_id = v.id
 left join purchases p on p.vendor_id = v.id
