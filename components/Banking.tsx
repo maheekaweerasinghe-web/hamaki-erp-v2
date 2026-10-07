@@ -79,6 +79,7 @@ type TransactionFilters = {
   business: string;
   category: string;
   direction: string;
+  status: string;
 };
 
 const categories = [
@@ -123,6 +124,7 @@ export default function Banking({ formatRs: _formatRs, showSuccess, showError }:
   const [filterBusiness, setFilterBusiness] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
   const [filterDirection, setFilterDirection] = useState("");
+  const [filterStatus, setFilterStatus] = useState("ACTIVE");
   const [appliedTransactionFilters, setAppliedTransactionFilters] = useState<TransactionFilters>({
     fromDate: `${todayLK().slice(0, 8)}01`,
     toDate: todayLK(),
@@ -130,6 +132,7 @@ export default function Banking({ formatRs: _formatRs, showSuccess, showError }:
     business: "",
     category: "",
     direction: "",
+    status: "ACTIVE",
   });
   const [transactionPage, setTransactionPage] = useState(0);
   const [transactionHasNext, setTransactionHasNext] = useState(false);
@@ -241,8 +244,7 @@ export default function Banking({ formatRs: _formatRs, showSuccess, showError }:
 
     let q = supabase
       .from("bank_transactions")
-      .select("id,txn_date,account_id,direction,amount,business,category,vendor_id,cod_cleared_amount,reference,notes,transfer_group_id,source,created_at")
-      .is("voided_at", null)
+      .select("id,txn_date,account_id,direction,amount,business,category,vendor_id,cod_cleared_amount,reference,notes,transfer_group_id,source,created_at,voided_at,void_reason")
       .gte("txn_date", appliedTransactionFilters.fromDate)
       .lte("txn_date", appliedTransactionFilters.toDate)
       .order("txn_date", { ascending: false })
@@ -253,6 +255,8 @@ export default function Banking({ formatRs: _formatRs, showSuccess, showError }:
     if (appliedTransactionFilters.business) q = q.eq("business", appliedTransactionFilters.business);
     if (appliedTransactionFilters.category) q = q.eq("category", appliedTransactionFilters.category);
     if (appliedTransactionFilters.direction) q = q.eq("direction", appliedTransactionFilters.direction);
+    if (appliedTransactionFilters.status === "ACTIVE") q = q.is("voided_at", null);
+    if (appliedTransactionFilters.status === "VOIDED") q = q.not("voided_at", "is", null);
 
     const { data, error } = await q;
     if (error) return showError(error.message);
@@ -270,6 +274,7 @@ export default function Banking({ formatRs: _formatRs, showSuccess, showError }:
       business: filterBusiness,
       category: filterCategory,
       direction: filterDirection,
+      status: filterStatus,
     });
     setTransactionPage(0);
   }
@@ -484,8 +489,8 @@ export default function Banking({ formatRs: _formatRs, showSuccess, showError }:
 
         <section className="mt-5 rounded-[18px] border border-[#d7dee8] bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-end justify-between gap-3"><div><h3 className="text-[18px] font-bold">Transaction history</h3><p className="mt-1 text-[12px] text-[var(--muted)]">Shows 25 transactions per page. Apply filters to trace older movements without loading the full history at once.</p></div><button className="secondary-btn" onClick={applyTransactionFilters}>Apply Filters</button></div>
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6"><input className="soft-input" type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)}/><input className="soft-input" type="date" value={toDate} onChange={e=>setToDate(e.target.value)}/><select className="soft-input" value={filterAccount} onChange={e=>setFilterAccount(e.target.value)}><option value="">All accounts</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.account_name}</option>)}</select><select className="soft-input" value={filterBusiness} onChange={e=>setFilterBusiness(e.target.value)}><option value="">All businesses</option><option>HAMAKI</option><option>TEESUPP</option><option>PERSONAL</option><option>OTHER</option></select><select className="soft-input" value={filterDirection} onChange={e=>setFilterDirection(e.target.value)}><option value="">In + Out</option><option value="IN">Money In</option><option value="OUT">Money Out</option></select><select className="soft-input" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}><option value="">All categories</option><option value="TRANSFER">Own-account transfer</option>{categories.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></div>
-          <div className="mt-4 overflow-x-auto"><table className="erp-table min-w-[1200px]"><thead><tr><th>Date</th><th>Account</th><th>Business</th><th>Category</th><th>Reference</th><th>Supplier</th><th className="num">In</th><th className="num">Out</th><th className="num">COD cleared</th><th className="center">Action</th></tr></thead><tbody>{transactions.map(r=><tr key={r.id}><td>{r.txn_date}</td><td className="font-semibold">{accountName(r.account_id)}</td><td>{r.business}</td><td>{r.category==='TRANSFER'?'Own-account transfer':(categoryLabel.get(r.category)||r.category)}</td><td>{r.reference||'—'}</td><td>{vendorName(r.vendor_id)||'—'}</td><td className="num font-semibold text-green-700">{r.direction==='IN'?wholeRs(r.amount):'—'}</td><td className="num font-semibold text-red-600">{r.direction==='OUT'?wholeRs(r.amount):'—'}</td><td className="num">{r.category==='COD_SETTLEMENT'?wholeRs(r.cod_cleared_amount ?? r.amount):'—'}</td><td className="center"><div className="flex justify-center gap-3">{r.category!=='TRANSFER'&&<button className="text-[12px] font-bold text-blue-700 hover:underline" onClick={()=>startEdit(r)}>Edit</button>}<button className="text-[12px] font-bold text-red-600 hover:underline" onClick={()=>void voidTransaction(r)}>Void</button></div></td></tr>)}</tbody></table>{!transactions.length&&<div className="p-5 text-center text-[13px] text-[var(--muted)]">No transactions in this filter.</div>}</div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6"><input className="soft-input" type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)}/><input className="soft-input" type="date" value={toDate} onChange={e=>setToDate(e.target.value)}/><select className="soft-input" value={filterAccount} onChange={e=>setFilterAccount(e.target.value)}><option value="">All accounts</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.account_name}</option>)}</select><select className="soft-input" value={filterBusiness} onChange={e=>setFilterBusiness(e.target.value)}><option value="">All businesses</option><option>HAMAKI</option><option>TEESUPP</option><option>PERSONAL</option><option>OTHER</option></select><select className="soft-input" value={filterDirection} onChange={e=>setFilterDirection(e.target.value)}><option value="">In + Out</option><option value="IN">Money In</option><option value="OUT">Money Out</option></select><select className="soft-input" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}><option value="">All categories</option><option value="TRANSFER">Own-account transfer</option>{categories.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select><select className="soft-input" value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}><option value="ACTIVE">Active only</option><option value="VOIDED">Voided only</option><option value="ALL">Active + voided</option></select></div>
+          <div className="mt-4 overflow-x-auto"><table className="erp-table min-w-[1450px]"><thead><tr><th>Date</th><th>Account</th><th>Business</th><th>Category</th><th>Reference</th><th>Notes</th><th>Supplier</th><th className="num">In</th><th className="num">Out</th><th className="num">COD cleared</th><th>Status</th><th className="center">Action</th></tr></thead><tbody>{transactions.map(r=><tr key={r.id} className={(r as any).voided_at ? "opacity-60" : ""}><td>{r.txn_date}</td><td className="font-semibold">{accountName(r.account_id)}</td><td>{r.business}</td><td>{r.category==='TRANSFER'?'Own-account transfer':(categoryLabel.get(r.category)||r.category)}</td><td>{r.reference||'—'}</td><td>{r.notes||'—'}</td><td>{vendorName(r.vendor_id)||'—'}</td><td className="num font-semibold text-green-700">{r.direction==='IN'?wholeRs(r.amount):'—'}</td><td className="num font-semibold text-red-600">{r.direction==='OUT'?wholeRs(r.amount):'—'}</td><td className="num">{r.category==='COD_SETTLEMENT'?wholeRs(r.cod_cleared_amount ?? r.amount):'—'}</td><td>{(r as any).voided_at?<div><span className="rounded-full bg-red-50 px-2 py-1 text-[10px] font-bold text-red-700">VOIDED</span>{(r as any).void_reason&&<div className="mt-1 text-[10px] text-[var(--muted)]">{(r as any).void_reason}</div>}</div>:<span className="rounded-full bg-green-50 px-2 py-1 text-[10px] font-bold text-green-700">ACTIVE</span>}</td><td className="center">{!(r as any).voided_at&&<div className="flex justify-center gap-3">{r.category!=='TRANSFER'&&<button className="text-[12px] font-bold text-blue-700 hover:underline" onClick={()=>startEdit(r)}>Edit</button>}<button className="text-[12px] font-bold text-red-600 hover:underline" onClick={()=>void voidTransaction(r)}>Void</button></div>}</td></tr>)}</tbody></table>{!transactions.length&&<div className="p-5 text-center text-[13px] text-[var(--muted)]">No transactions in this filter.</div>}</div>
           <div className="mt-4 flex items-center justify-between gap-3">
             <div className="text-[12px] text-[var(--muted)]">
               Page {transactionPage + 1} • up to {transactionPageSize} transactions
