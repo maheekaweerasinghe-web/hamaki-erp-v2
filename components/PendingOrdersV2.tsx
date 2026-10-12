@@ -1428,7 +1428,6 @@ export default function PendingOrdersV2({
                   <th>Address</th>
                   <th>City</th>
                   <th>Products</th>
-                  <th>Payment</th>
                   <th className="num">Balance</th>
                   <th>Koombiyo</th>
                   <th>Actions</th>
@@ -1461,25 +1460,27 @@ export default function PendingOrdersV2({
                       <td>{row.address || "-"}</td>
                       <td>{row.koombiyo_city_name || row.city || "-"}</td>
                       <td>{row.product_summary || "-"}</td>
-                      <td>
+                      <td className="num">
+                        <div>{formatRs(n(row.balance))}</div>
                         {(() => {
                           const payment = String(row.transaction_type || "COD");
                           const isCod = payment.toUpperCase() === "COD";
 
                           return (
-                            <span
-                              className={
-                                isCod
-                                  ? "inline-flex rounded-full bg-[#ffedd5] px-2.5 py-1 text-[11px] font-bold text-[#c2410c]"
-                                  : "inline-flex rounded-full bg-[#dcfce7] px-2.5 py-1 text-[11px] font-bold text-[#166534]"
-                              }
-                            >
-                              {payment}
-                            </span>
+                            <div className="mt-1 flex justify-end">
+                              <span
+                                className={
+                                  isCod
+                                    ? "inline-flex rounded-full bg-[#ffedd5] px-2 py-0.5 text-[10px] font-bold text-[#c2410c]"
+                                    : "inline-flex rounded-full bg-[#dcfce7] px-2 py-0.5 text-[10px] font-bold text-[#166534]"
+                                }
+                              >
+                                {payment}
+                              </span>
+                            </div>
                           );
                         })()}
                       </td>
-                      <td className="num">{formatRs(n(row.balance))}</td>
                       <td>
                         {locked ? (
                           <div>
