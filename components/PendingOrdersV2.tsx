@@ -1311,7 +1311,12 @@ export default function PendingOrdersV2({
       <div className="soft-card mt-4 p-5">
         <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <h2 className="text-[22px] font-bold text-[var(--text)]">Pending Orders</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-[22px] font-bold text-[var(--text)]">Pending Orders</h2>
+              <span className="rounded-full bg-[#eef2ff] px-2.5 py-1 text-[12px] font-bold text-[#1e40af]">
+                {loading ? "..." : `${rows.length} pending`}
+              </span>
+            </div>
             <div className="mt-1 text-sm text-[var(--muted)]">
               Koombiyo orders: create shipment, print label, then dispatch by barcode scan. Other delivery methods: use Quick Dispatch when the parcel is ready to leave.
             </div>
