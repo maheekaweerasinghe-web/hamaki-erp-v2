@@ -35,6 +35,7 @@ type PendingRow = {
   city: string | null;
   product_summary: string | null;
   balance: number;
+  transaction_type?: string | null;
   koombiyo_waybill_id: string | null;
   koombiyo_city_id: string | null;
   koombiyo_city_name: string | null;
@@ -372,7 +373,28 @@ export default function PendingOrdersV2({
         return;
       }
 
-      setRows((data || []) as PendingRow[]);
+      const pendingRows = (data || []) as PendingRow[];
+
+      if (pendingRows.length) {
+        const { data: paymentData, error: paymentError } = await supabase.rpc(
+          "get_pending_order_payment_types"
+        );
+
+        if (!paymentError && Array.isArray(paymentData)) {
+          const paymentById = new Map(
+            paymentData.map((x: any) => [
+              String(x.order_id),
+              String(x.transaction_type || "COD"),
+            ])
+          );
+
+          pendingRows.forEach((row) => {
+            row.transaction_type = paymentById.get(row.order_id) || row.transaction_type || "COD";
+          });
+        }
+      }
+
+      setRows(pendingRows);
       setSelectedIds([]);
     } finally {
       if (!silent) setLoading(false);
@@ -1438,7 +1460,27 @@ export default function PendingOrdersV2({
                       <td>{row.address || "-"}</td>
                       <td>{row.koombiyo_city_name || row.city || "-"}</td>
                       <td>{row.product_summary || "-"}</td>
-                      <td className="num">{formatRs(n(row.balance))}</td>
+                      <td className="num">
+                        <div>{formatRs(n(row.balance))}</div>
+                        {(() => {
+                          const payment = String(row.transaction_type || "COD");
+                          const isCod = payment.toUpperCase() === "COD";
+
+                          return (
+                            <div className="mt-1 flex justify-end">
+                              <span
+                                className={
+                                  isCod
+                                    ? "inline-flex rounded-full bg-[#ffedd5] px-2 py-0.5 text-[10px] font-bold text-[#c2410c]"
+                                    : "inline-flex rounded-full bg-[#dcfce7] px-2 py-0.5 text-[10px] font-bold text-[#166534]"
+                                }
+                              >
+                                {payment}
+                              </span>
+                            </div>
+                          );
+                        })()}
+                      </td>
                       <td>
                         {locked ? (
                           <div>
