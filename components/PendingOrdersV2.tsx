@@ -362,7 +362,9 @@ export default function PendingOrdersV2({
 
       const { data, error } = await supabase.rpc("get_pending_orders_koombiyo", {
         p_query: search.trim() || null,
-        p_limit: 200,
+        // The RPC keeps p_limit for backward compatibility. Request the full
+        // pending set so older orders are never hidden by the previous 200-row cap.
+        p_limit: 2147483647,
       });
 
       if (error) {
